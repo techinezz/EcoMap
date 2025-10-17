@@ -1,10 +1,10 @@
-import dynamic from 'next/dynamic';
-import EcoMap from "./map"
+import Image from "next/image";
+import AIChat from "./AIChat";
 
 export default function Home() {
   return (
     <div>
-      <EcoMap/>
-      </div>
+      <AIChat />
+    </div>
   );
 }
