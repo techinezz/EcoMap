@@ -7,6 +7,8 @@ import React, { useState } from "react";
 
 export default function EcoMapOverlayComponent() {
   // State for managing open/closed menu
+  type Overlay = "None" | "Air Quality" | "Carbon Footprint";
+
   const [isOpen, setIsOpen] = useState(false);
 
   // Functions to toggle the state
