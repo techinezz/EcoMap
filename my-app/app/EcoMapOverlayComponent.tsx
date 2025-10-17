@@ -34,7 +34,7 @@ export default function EcoMapOverlayComponent() {
     //  - p-3: Padding inside
     //  - border: Border around the element
     //  - border-green-600: Green border color
-    <div className="bg-white rounded-3xl p-5 py-6 border border-green-700 shadow-lg w-64">
+    <div className="bg-white rounded-3xl p-5 py-6 border border-green-700 shadow-lg w-72">
       <div className="flex items-center justify-between">
         {/* flex: Makes children (logo/title and button) line up horizontally
                       items-center: Vertically centers them
