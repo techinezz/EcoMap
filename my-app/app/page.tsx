@@ -1,7 +1,10 @@
-import Image from "next/image";
+import dynamic from 'next/dynamic';
+import EcoMap from "./map"
 
 export default function Home() {
   return (
-    <div></div>
+    <div>
+      <EcoMap/>
+      </div>
   );
 }
