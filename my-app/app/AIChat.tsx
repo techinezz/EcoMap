@@ -14,7 +14,7 @@ export default function AIChat() {
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your AI assistant. How can I help you today?',
+      content: 'Hello! I\'m your map assistant. I can help you analyze locations, understand geographic data, and provide insights about specific areas. What would you like to know about the map?',
       timestamp: new Date(),
     },
   ]);
