@@ -9,14 +9,13 @@ import {
   useMap,
   Marker,
   useMapEvents,
-  // CircleMarker removed previously
 } from "react-leaflet";
-import L, { LatLngTuple, LatLng } from "leaflet";
+import L, { LatLngTuple } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import { useEffect, useState, useRef, useCallback, FC } from "react";
 import "leaflet-draw";
-// Assuming TargetLocation is defined correctly
+
 export interface TargetLocation {
   bounds: L.LatLngBoundsExpression;
 }
@@ -112,10 +111,9 @@ interface PointPlacement {
     center: LatLngTuple;
 }
 
-// Define the world boundaries
 const worldBounds: L.LatLngBoundsExpression = [
-  [-90, -180], // Southwest
-  [90, 180], // Northeast
+  [-90, -180],
+  [90, 180],
 ];
 
 // ✅ 5. MapController
@@ -142,9 +140,9 @@ function MapController({
         if (currentZoom > treeLossZoom) {
           map.flyTo(currentCenter, treeLossZoom);
         }
-        map.setMaxZoom(treeLossZoom); // Set map's max zoom
+        map.setMaxZoom(treeLossZoom);
       } else if (prevOverlay === "Tree Removal") {
-        map.setMaxZoom(globalMaxZoom); // Reset map's max zoom
+        map.setMaxZoom(globalMaxZoom);
       }
     }
     prevOverlayRef.current = selectedOverlay;
@@ -167,18 +165,15 @@ function LocationFinder({
         (position) => {
           const { latitude, longitude } = position.coords;
           const userCenter: LatLngTuple = [latitude, longitude];
-          console.log("Location found:", userCenter);
-          map.flyTo(userCenter, 13);
+          map.flyTo(userCenter, 19);
           onLocationFound(userCenter);
         },
         () => {
           console.log(
-            "Geolocation permission denied or error. Staying at default location."
+            "Geolocation permission denied on load. Staying at default location."
           );
         }
       );
-    } else {
-        console.log("Geolocation is not supported or not available in this environment.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, onLocationFound]);
@@ -211,7 +206,6 @@ function MapClickHandler({
 }) {
     const isPointInPolygons = useCallback((point: L.LatLng): boolean => {
         if (!featureGroupRef.current) {
-            console.log("FeatureGroup ref is null in isPointInPolygons");
             return false;
         }
 
@@ -232,7 +226,6 @@ function MapClickHandler({
             geoJsonCoords.push(geoJsonCoords[0]);
             }
             if (geoJsonCoords.length < 4) {
-                console.warn("Skipping invalid polygon for point check:", geoJsonCoords);
                 return;
             }
             try {
@@ -243,7 +236,6 @@ function MapClickHandler({
             } catch (error) {
                  console.error("Error creating Turf polygon:", error, geoJsonCoords);
             }
-
         }
         });
         return isInside;
@@ -255,26 +247,22 @@ function MapClickHandler({
       if (!simulationMode) return;
 
       if (currentClusterCount >= maxClusters) {
-        console.log(`Maximum click limit (${maxClusters}) reached!`);
         onMaxClustersReached();
         return;
       }
 
       if (isPointInPolygons(e.latlng)) {
         const center: LatLngTuple = [e.latlng.lat, e.latlng.lng];
-
         if (simulationMode === 'trees' || simulationMode === 'solar') {
           const count = brushSize;
           const individualPoints: LatLngTuple[] = [];
           const scatterRadius = 0.0005;
-
           for (let i = 0; i < count; i++) {
             const offsetX = (Math.random() - 0.5) * scatterRadius * 2;
             const offsetY = (Math.random() - 0.5) * scatterRadius * 2;
             individualPoints.push([center[0] + offsetY, center[1] + offsetX]);
           }
           onItemPlaced({ mode: simulationMode, center, count, individualPoints });
-
         } else if (simulationMode === 'pavement' || simulationMode === 'park') {
           onItemPlaced({ mode: simulationMode, center });
         }
@@ -295,48 +283,37 @@ const treeIcon = L.icon({
   iconSize: [25, 25],
   iconAnchor: [12, 25],
 });
-
 const solarIcon = L.icon({
   iconUrl: '/sun.svg',
   iconSize: [25, 25],
   iconAnchor: [12, 12],
 });
-
 const pavementIcon = L.icon({
     iconUrl: '/road.svg',
     iconSize: [25, 25],
     iconAnchor: [12, 12],
 });
-
 const parkIcon = L.icon({
     iconUrl: '/park.svg',
     iconSize: [30, 30],
     iconAnchor: [15, 15],
 });
 
-
 // ✅ 9. Main EcoMap Component
-// --- Helper Component ---
 function ChangeView({ target }: { target: TargetLocation | null }) {
   const map = useMap();
   useEffect(() => {
     if (target && target.bounds) {
         try {
-            const bounds = Array.isArray(target.bounds)
-              ? L.latLngBounds(target.bounds as [[number, number], [number, number]])
-              : target.bounds;
+            const bounds = L.latLngBounds(target.bounds);
             if (bounds.isValid()) {
                 map.flyToBounds(bounds, { padding: [50, 50] });
-            } else {
-                console.error("Invalid bounds provided to ChangeView:", target.bounds);
             }
         } catch (error) {
-             console.error("Error flying to bounds in ChangeView:", error, target.bounds);
+             console.error("Error flying to bounds:", error, target.bounds);
         }
-
     }
   }, [target, map]);
-
   return null;
 }
 
@@ -357,15 +334,13 @@ interface EcoMapProps {
   onSimulationDataChange?: (data: SimulationData) => void;
 }
 
-// --- Main Component ---
-const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimulationDataChange }) => {
+
+const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup | null>(null);
   const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
   const mapRef = useRef<L.Map>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
-
-  // --- Simulation State ---
   const [simulationMode, setSimulationMode] = useState<SimulationMode>(null);
   const [brushSize, setBrushSize] = useState(10);
   const [placedTrees, setPlacedTrees] = useState<LatLngTuple[]>([]);
@@ -374,50 +349,60 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
   const [solarClusters, setSolarClusters] = useState<PointCluster[]>([]);
   const [placedPavementPoints, setPlacedPavementPoints] = useState<PointPlacement[]>([]);
   const [placedParks, setPlacedParks] = useState<PointPlacement[]>([]);
-
   const MAX_CLUSTERS = 20;
-
-  // --- Alert State ---
   const [showMaxClusterAlert, setShowMaxClusterAlert] = useState(false);
+  
+  const [isChallengeActive, setIsChallengeActive] = useState(false);
+  const [challengeBounds, setChallengeBounds] = useState<L.LatLngBounds | null>(null);
 
-  // --- Map locations and zooms ---
   const newYorkCenter: LatLngTuple = [40.7128, -74.006];
   const defaultZoom = 19;
   const treeLossZoom = 11;
-  const globalMaxZoom = 19; // Keep this as the overall max zoom limit
+  const globalMaxZoom = 19;
   const [currentCenter, setCurrentCenter] = useState<LatLngTuple>(newYorkCenter);
 
   // --- Handlers ---
   const handleToggleDrawing = () => {
+    if (isChallengeActive) {
+      console.log("Drawing new shapes is disabled during a challenge.");
+      return;
+    }
     setSimulationMode(null);
     setDrawMode((prevMode) => (prevMode === 'polygon' ? null : 'polygon'));
   };
 
+   // ✅ UPDATED: This now ONLY adds the layer to the map
    const handleLayerCreated = (layer: L.Layer) => {
     if (featureGroupRef.current) {
         if (!featureGroupRef.current.hasLayer(layer)) {
              featureGroupRef.current.addLayer(layer);
              console.log("Shape added to FeatureGroup");
-        } else {
-            console.log("Layer already exists in FeatureGroup");
         }
-    } else {
-        console.error("featureGroupRef.current is null in handleLayerCreated");
-    }
-
-    if (onCoordinatesFinished && featureGroupRef.current) {
-     try {
-        const layers = featureGroupRef.current.getLayers();
-        const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
-        const allCoordinates = allGeoJSON.map(
-         (geojson) => geojson.geometry.coordinates,
-        );
-        onCoordinatesFinished(allCoordinates);
-     } catch (error) {
-        console.error("Error processing layer coordinates:", error);
-     }
     }
   };
+
+  // ✅ NEW: This function now handles stopping the draw and sending coordinates
+  const handleDrawStop = () => {
+    setDrawMode(null); // Always stop the drawing mode
+
+    // Check if the callback exists and if there are layers to process
+    if (onCoordinatesFinished && featureGroupRef.current) {
+        const layers = featureGroupRef.current.getLayers();
+        if (layers.length > 0) { // Only send if a shape was actually drawn
+            try {
+                const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
+                const allCoordinates = allGeoJSON.map(
+                (geojson) => geojson.geometry.coordinates as any
+                );
+                console.log("Drawing stopped, sending coordinates...");
+                onCoordinatesFinished(allCoordinates);
+            } catch (error) {
+                console.error("Error processing layer coordinates on draw stop:", error);
+            }
+        }
+    }
+  };
+
 
   const handleClearLayers = () => {
     if (featureGroupRef.current) {
@@ -431,7 +416,8 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
     setPlacedParks([]);
     setDrawMode(null);
     setSimulationMode(null);
-    console.log('All shapes and simulation items cleared');
+    setIsChallengeActive(false);
+    setChallengeBounds(null);
   };
 
   const toggleOverlayMenu = () => {
@@ -440,19 +426,35 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
 
   const handleOverlayChange = (overlay: Overlay) => {
     setSelectedOverlay(overlay);
-    console.log("Selected overlay:", overlay);
   };
 
   const handleRecenter = () => {
-    console.log("Recenter clicked. Current mapRef:", mapRef.current);
-    if (mapRef.current) {
-        console.log("Flying to:", currentCenter, "Zoom:", defaultZoom);
-      mapRef.current.flyTo(currentCenter, defaultZoom);
-      mapRef.current.setMaxZoom(globalMaxZoom); // Reset max zoom on recenter
-      setSelectedOverlay('None');
-      setSimulationMode(null);
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    if (isChallengeActive && challengeBounds) {
+      map.flyToBounds(challengeBounds, { padding: [50, 50] });
     } else {
-        console.error("mapRef.current is null, cannot recenter.");
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            const userCenter: LatLngTuple = [latitude, longitude];
+            map.flyTo(userCenter, defaultZoom);
+            setCurrentCenter(userCenter);
+          },
+          () => {
+            map.flyTo(currentCenter, defaultZoom);
+          }
+        );
+      } else {
+        map.flyTo(newYorkCenter, defaultZoom);
+      }
+    }
+    if (!isChallengeActive) {
+        map.setMaxZoom(globalMaxZoom);
+        setSelectedOverlay('None');
+        setSimulationMode(null);
     }
   };
 
@@ -508,7 +510,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
     }) => {
       const currentTotalClicks = treeClusters.length + solarClusters.length + placedPavementPoints.length + placedParks.length;
       if (currentTotalClicks >= MAX_CLUSTERS) {
-        console.log(`Max click limit (${MAX_CLUSTERS}) reached.`);
         triggerMaxClusterAlert();
         return;
       }
@@ -531,6 +532,38 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
     [treeClusters.length, solarClusters.length, placedPavementPoints.length, placedParks.length, triggerMaxClusterAlert]
   );
 
+  const challengePolygonCoords: LatLngTuple[] = [
+    [37.8000, -122.4600],
+    [37.8000, -122.4550],
+    [37.7975, -122.4550],
+    [37.7975, -122.4600],
+  ];
+
+  const handleStartChallenge = () => {
+    handleClearLayers();
+
+    if (featureGroupRef.current && mapRef.current) {
+        const map = mapRef.current;
+        const featureGroup = featureGroupRef.current;
+        const polygon = L.polygon(challengePolygonCoords, { color: '#488a36ff' });
+        
+        featureGroup.addLayer(polygon);
+        
+        const bounds = polygon.getBounds();
+        setChallengeBounds(bounds);
+        setIsChallengeActive(true);
+        
+        map.flyToBounds(bounds, { padding: [50, 50] });
+
+        // ✅ REMOVED: No longer opens Gemini on challenge start
+        
+        console.log("Challenge started! Area: Presidio, San Francisco.");
+    } else {
+        console.error("Map or FeatureGroup ref not ready for challenge start.");
+    }
+  };
+
+
   const baseButtonClass =
     "rounded-full border-none cursor-pointer transition-colors flex items-center justify-center h-12 w-12";
 
@@ -551,103 +584,32 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
       <div className="absolute top-[36px] left-[880px] z-[1000] flex flex-col items-end gap-2">
         {/* Top row of buttons */}
         <div className="bg-white rounded-full shadow-md flex flex-row items-center p-1.5 gap-1.5">
-          {/* Pen Button */}
-          <button
-            onClick={handleToggleDrawing}
-            className={`${baseButtonClass} ${
-              drawMode === 'polygon'
-                ? 'bg-green-100 ring-2 ring-green-500'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            title="Draw Area"
-          >
+          <button onClick={handleToggleDrawing} className={`${baseButtonClass} ${drawMode === 'polygon' ? 'bg-green-100 ring-2 ring-green-500' : 'bg-white hover:bg-gray-100'} ${isChallengeActive ? 'opacity-50 cursor-not-allowed' : ''}`} title={isChallengeActive ? "Drawing disabled during challenge" : "Draw Area"} disabled={isChallengeActive}>
             <img src="/pen-tool.svg" alt="Draw Area" className="w-7 h-7" />
           </button>
-
-          {/* Eraser Button */}
-          <button
-            onClick={handleClearLayers}
-            className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`}
-            title="Clear Shapes & Items"
-          >
+          <button onClick={handleClearLayers} className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`} title="Clear Shapes & Items">
             <img src="/eraser.svg" alt="Clear All" className="w-7 h-7" />
           </button>
-
-          {/* Map/Overlay Button */}
-          <button
-            onClick={toggleOverlayMenu}
-            className={`${baseButtonClass} ${
-              isOverlayMenuOpen
-                ? 'bg-green-100 ring-2 ring-green-500'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            title="Map Overlays"
-          >
+          <button onClick={toggleOverlayMenu} className={`${baseButtonClass} ${isOverlayMenuOpen ? 'bg-green-100 ring-2 ring-green-500' : 'bg-white hover:bg-gray-100'}`} title="Map Overlays">
             <img src="/map.svg" alt="Overlay" className="w-7 h-7" />
           </button>
-
-          {/* Recenter Button */}
-          <button
-            onClick={handleRecenter}
-            className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`}
-            title="Center on My Location"
-          >
-            <img src="/gps.svg" alt="Center on my location" className="w-7 h-7" />
+          <button onClick={handleRecenter} className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`} title={isChallengeActive ? "Center on Challenge Area" : "Center on My Location"}>
+            <img src="/gps.svg" alt="Recenter Map" className="w-7 h-7" />
           </button>
-
-          {/* Tree Planting Button */}
-          <button
-            onClick={() => handleToggleSimulationMode('trees')}
-            className={`${baseButtonClass} ${
-              simulationMode === 'trees'
-                ? 'bg-green-100 ring-2 ring-green-500'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            title="Plant Trees"
-          >
+          <button onClick={() => handleToggleSimulationMode('trees')} className={`${baseButtonClass} ${simulationMode === 'trees' ? 'bg-green-100 ring-2 ring-green-500' : 'bg-white hover:bg-gray-100'}`} title="Plant Trees">
             <img src="/tree.svg" alt="Plant Trees" className="w-7 h-7" />
           </button>
-
-          {/* Solar Panel Button */}
-          <button
-            onClick={() => handleToggleSimulationMode('solar')}
-            className={`${baseButtonClass} ${
-              simulationMode === 'solar'
-                ? 'bg-yellow-100 ring-2 ring-yellow-500'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            title="Place Solar Panels"
-          >
+          <button onClick={() => handleToggleSimulationMode('solar')} className={`${baseButtonClass} ${simulationMode === 'solar' ? 'bg-yellow-100 ring-2 ring-yellow-500' : 'bg-white hover:bg-gray-100'}`} title="Place Solar Panels">
             <img src="/sun.svg" alt="Place Solar Panels" className="w-7 h-7" />
           </button>
-
-          {/* Permeable Pavement Button */}
-          <button
-            onClick={() => handleToggleSimulationMode('pavement')}
-            className={`${baseButtonClass} ${
-              simulationMode === 'pavement'
-                ? 'bg-blue-100 ring-2 ring-blue-500'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            title="Add Permeable Pavement"
-          >
+          <button onClick={() => handleToggleSimulationMode('pavement')} className={`${baseButtonClass} ${simulationMode === 'pavement' ? 'bg-blue-100 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-100'}`} title="Add Permeable Pavement">
              <img src="/road.svg" alt="Add Permeable Pavement" className="w-7 h-7" />
           </button>
-
-          {/* Park Button */}
-           <button
-            onClick={() => handleToggleSimulationMode('park')}
-            className={`${baseButtonClass} ${
-              simulationMode === 'park'
-                ? 'bg-lime-100 ring-2 ring-lime-500'
-                : 'bg-white hover:bg-gray-100'
-            }`}
-            title="Add Park Area"
-          >
+           <button onClick={() => handleToggleSimulationMode('park')} className={`${baseButtonClass} ${simulationMode === 'park' ? 'bg-lime-100 ring-2 ring-lime-500' : 'bg-white hover:bg-gray-100'}`} title="Add Park Area">
              <img src="/park.svg" alt="Add Park Area" className="w-7 h-7" />
           </button>
-
         </div>
+        
 
         {/* Overlay Dropdown Menu */}
         {isOverlayMenuOpen && (
@@ -658,14 +620,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
             <div className="space-y-3 text-sm">
                 {OVERLAYS.map((overlay) => (
                 <label key={overlay} className="flex items-center cursor-pointer">
-                    <input
-                    type="radio"
-                    name="overlay-selection"
-                    value={overlay}
-                    checked={selectedOverlay === overlay}
-                    onChange={() => handleOverlayChange(overlay)}
-                    className="sr-only peer"
-                    />
+                    <input type="radio" name="overlay-selection" value={overlay} checked={selectedOverlay === overlay} onChange={() => handleOverlayChange(overlay)} className="sr-only peer" />
                     <span className="h-4 w-4 rounded-full border-2 border-[#25491B] bg-white transition-colors duration-150 peer-checked:bg-[#25491B] peer-checked:border-[#25491B]"></span>
                     <span className="ml-2 text-[#25491B]">{overlay}</span>
                 </label>
@@ -701,7 +656,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
                 disabled={totalClicksMade >= MAX_CLUSTERS}
                 />
              )}
-
             <button
               onClick={handleDoneSimulating}
               className="w-full mt-2 px-4 py-2 bg-[#488a36] text-white rounded-md hover:bg-[#3a6e2b] transition-colors text-sm"
@@ -711,16 +665,15 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
           </div>
         )}
       </div>
-        <div className="absolute bg-[#25491B]  text-sm text-white p-4 right-[120px] top-[36px] z-2000 rounded-full cursor-pointer">
-          <button>Start Challenge</button>
-        </div>
+        {!isChallengeActive && (
+            <div className="bg-[#25491B] text-sm text-white p-4 rounded-full cursor-pointer shadow-lg hover:bg-green-800 transition-colors z-1002 absolute right-[100px] top-[36px]">
+            <button onClick={handleStartChallenge} className="cursor-pointer">Start Challenge</button>
+            </div>
+        )}
        {/* Max Cluster Alert Message */}
        {showMaxClusterAlert && (
             <div
-            className="absolute top-10 left-1/2 transform -translate-x-1/2 z-[99999]
-                        px-4 py-2 bg-red-500/70
-                        text-white text-sm rounded-md shadow-lg
-                        transition-opacity duration-300"
+            className="absolute top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-4 py-2 bg-red-500/70 text-white text-sm rounded-md shadow-lg transition-opacity duration-300"
             >
             Maximum number of clicks ({MAX_CLUSTERS}) reached!
             </div>
@@ -730,18 +683,17 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
       <MapContainer
         ref={mapRef}
         center={newYorkCenter}
-        zoom={defaultZoom}
+        zoom={13}
         className={`h-full w-full ${simulationMode ? 'cursor-crosshair' : ''}`}
         zoomControl={false}
         minZoom={3}
-        maxZoom={globalMaxZoom} // Apply overall max zoom
+        maxZoom={globalMaxZoom}
         maxBounds={worldBounds}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           noWrap={true}
-          // ✅ FIX: Explicitly set maxZoom for the base layer
           maxZoom={globalMaxZoom}
         />
 
@@ -752,8 +704,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
             attribution={waqiAttribution}
             opacity={0.7}
             pane="overlayPane"
-             // Allow air quality layer to zoom further if its source supports it
-             // maxZoom={globalMaxZoom} // Or leave unset if unknown
+            maxZoom={globalMaxZoom}
           />
         )}
         {selectedOverlay === "Tree Removal" && (
@@ -762,7 +713,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
             attribution={gfwAttribution}
             opacity={0.7}
             pane="overlayPane"
-            maxZoom={12} // Specific maxZoom for THIS layer's tiles
+            maxZoom={12}
             noWrap={true}
           />
         )}
@@ -776,13 +727,11 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
             <Marker key={`tree-${index}`} position={pos} icon={treeIcon} />
           ))}
         </MarkerClusterGroup>
-
         <MarkerClusterGroup chunkedLoading maxClusterRadius={20}>
           {placedSolarPanels.map((pos, index) => (
             <Marker key={`solar-${index}`} position={pos} icon={solarIcon} />
           ))}
         </MarkerClusterGroup>
-
         {placedPavementPoints.map((pavement) => (
            <Marker
              key={pavement.id}
@@ -790,7 +739,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
              icon={pavementIcon}
            />
         ))}
-
          {placedParks.map((park) => (
            <Marker
              key={park.id}
@@ -799,12 +747,10 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
            />
         ))}
 
-        {/* Removed absolute positioned Start Challenge button */}
-
         {/* Controls and Controllers */}
         <DrawControl
           drawMode={drawMode}
-          onDrawStop={() => setDrawMode(null)}
+          onDrawStop={handleDrawStop} // ✅ Use the new handler here
           onLayerCreated={handleLayerCreated}
         />
         <ZoomControl position="bottomright" />
@@ -818,7 +764,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
         <LocationFinder onLocationFound={setCurrentCenter} />
         <MapClickHandler
             simulationMode={simulationMode}
-            featureGroupRef={featureGroupRef}
+            featureGroupRef={featureGroupRef as React.RefObject<L.FeatureGroup<any>> | null}
             brushSize={brushSize}
             onItemPlaced={handleItemPlaced}
             maxClusters={MAX_CLUSTERS}
