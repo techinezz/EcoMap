@@ -648,7 +648,9 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
           </div>
         )}
       </div>
-
+        <div className="absolute bg-[#25491B]  text-sm text-white p-4 right-[120px] top-[36px] z-2000 rounded-full cursor-pointer">
+          <button className="cursor-pointer">Start Challenge</button>
+        </div>
        {/* Max Cluster Alert Message */}
        {showMaxClusterAlert && (
             <div
