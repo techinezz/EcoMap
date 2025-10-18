@@ -9,14 +9,13 @@ import {
   useMap,
   Marker,
   useMapEvents,
-  // CircleMarker removed previously
 } from "react-leaflet";
-import L, { LatLngTuple, LatLng } from "leaflet";
+import L, { LatLngTuple } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import { useEffect, useState, useRef, useCallback, FC } from "react";
 import "leaflet-draw";
-// Assuming TargetLocation is defined correctly
+
 export interface TargetLocation {
   bounds: L.LatLngBoundsExpression;
 }
@@ -112,10 +111,9 @@ interface PointPlacement {
     center: LatLngTuple;
 }
 
-// Define the world boundaries
 const worldBounds: L.LatLngBoundsExpression = [
-  [-90, -180], // Southwest
-  [90, 180], // Northeast
+  [-90, -180],
+  [90, 180],
 ];
 
 // ✅ 5. MapController
@@ -142,9 +140,9 @@ function MapController({
         if (currentZoom > treeLossZoom) {
           map.flyTo(currentCenter, treeLossZoom);
         }
-        map.setMaxZoom(treeLossZoom); // Set map's max zoom
+        map.setMaxZoom(treeLossZoom);
       } else if (prevOverlay === "Tree Removal") {
-        map.setMaxZoom(globalMaxZoom); // Reset map's max zoom
+        map.setMaxZoom(globalMaxZoom);
       }
     }
     prevOverlayRef.current = selectedOverlay;
@@ -153,7 +151,7 @@ function MapController({
   return null;
 }
 
-// ✅ 6. LocationFinder
+// ✅ 6. LocationFinder (RE-ADDED)
 function LocationFinder({
   onLocationFound,
 }: {
@@ -167,18 +165,16 @@ function LocationFinder({
         (position) => {
           const { latitude, longitude } = position.coords;
           const userCenter: LatLngTuple = [latitude, longitude];
-          console.log("Location found:", userCenter);
-          map.flyTo(userCenter, 13);
+          console.log("Initial location found:", userCenter);
+          map.flyTo(userCenter, 17); // Use 19 for initial zoom
           onLocationFound(userCenter);
         },
         () => {
           console.log(
-            "Geolocation permission denied or error. Staying at default location."
+            "Geolocation permission denied on load. Staying at default location."
           );
         }
       );
-    } else {
-        console.log("Geolocation is not supported or not available in this environment.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, onLocationFound]);
@@ -211,7 +207,6 @@ function MapClickHandler({
 }) {
     const isPointInPolygons = useCallback((point: L.LatLng): boolean => {
         if (!featureGroupRef.current) {
-            console.log("FeatureGroup ref is null in isPointInPolygons");
             return false;
         }
 
@@ -232,7 +227,6 @@ function MapClickHandler({
             geoJsonCoords.push(geoJsonCoords[0]);
             }
             if (geoJsonCoords.length < 4) {
-                console.warn("Skipping invalid polygon for point check:", geoJsonCoords);
                 return;
             }
             try {
@@ -243,7 +237,6 @@ function MapClickHandler({
             } catch (error) {
                  console.error("Error creating Turf polygon:", error, geoJsonCoords);
             }
-
         }
         });
         return isInside;
@@ -255,26 +248,22 @@ function MapClickHandler({
       if (!simulationMode) return;
 
       if (currentClusterCount >= maxClusters) {
-        console.log(`Maximum click limit (${maxClusters}) reached!`);
         onMaxClustersReached();
         return;
       }
 
       if (isPointInPolygons(e.latlng)) {
         const center: LatLngTuple = [e.latlng.lat, e.latlng.lng];
-
         if (simulationMode === 'trees' || simulationMode === 'solar') {
           const count = brushSize;
           const individualPoints: LatLngTuple[] = [];
           const scatterRadius = 0.0005;
-
           for (let i = 0; i < count; i++) {
             const offsetX = (Math.random() - 0.5) * scatterRadius * 2;
             const offsetY = (Math.random() - 0.5) * scatterRadius * 2;
             individualPoints.push([center[0] + offsetY, center[1] + offsetX]);
           }
           onItemPlaced({ mode: simulationMode, center, count, individualPoints });
-
         } else if (simulationMode === 'pavement' || simulationMode === 'park') {
           onItemPlaced({ mode: simulationMode, center });
         }
@@ -295,28 +284,23 @@ const treeIcon = L.icon({
   iconSize: [25, 25],
   iconAnchor: [12, 25],
 });
-
 const solarIcon = L.icon({
   iconUrl: '/sun.svg',
   iconSize: [25, 25],
   iconAnchor: [12, 12],
 });
-
 const pavementIcon = L.icon({
     iconUrl: '/road.svg',
     iconSize: [25, 25],
     iconAnchor: [12, 12],
 });
-
 const parkIcon = L.icon({
     iconUrl: '/park.svg',
     iconSize: [30, 30],
     iconAnchor: [15, 15],
 });
 
-
 // ✅ 9. Main EcoMap Component
-// --- Helper Component ---
 function ChangeView({ target }: { target: TargetLocation | null }) {
   const map = useMap();
   useEffect(() => {
@@ -325,34 +309,26 @@ function ChangeView({ target }: { target: TargetLocation | null }) {
             const bounds = L.latLngBounds(target.bounds);
             if (bounds.isValid()) {
                 map.flyToBounds(bounds, { padding: [50, 50] });
-            } else {
-                console.error("Invalid bounds provided to ChangeView:", target.bounds);
             }
         } catch (error) {
-             console.error("Error flying to bounds in ChangeView:", error, target.bounds);
+             console.error("Error flying to bounds:", error, target.bounds);
         }
-
     }
   }, [target, map]);
-
   return null;
 }
 
-// --- Props Interface ---
 interface EcoMapProps {
   targetLocation: TargetLocation | null;
   onCoordinatesFinished?: (coordinates: any[]) => void;
 }
 
-// --- Main Component ---
 const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup | null>(null);
   const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
   const mapRef = useRef<L.Map>(null);
   const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
-
-  // --- Simulation State ---
   const [simulationMode, setSimulationMode] = useState<SimulationMode>(null);
   const [brushSize, setBrushSize] = useState(10);
   const [placedTrees, setPlacedTrees] = useState<LatLngTuple[]>([]);
@@ -361,20 +337,15 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
   const [solarClusters, setSolarClusters] = useState<PointCluster[]>([]);
   const [placedPavementPoints, setPlacedPavementPoints] = useState<PointPlacement[]>([]);
   const [placedParks, setPlacedParks] = useState<PointPlacement[]>([]);
-
   const MAX_CLUSTERS = 20;
-
-  // --- Alert State ---
   const [showMaxClusterAlert, setShowMaxClusterAlert] = useState(false);
-
-  // --- Map locations and zooms ---
   const newYorkCenter: LatLngTuple = [40.7128, -74.006];
+  
   const defaultZoom = 19;
   const treeLossZoom = 11;
-  const globalMaxZoom = 19; // Keep this as the overall max zoom limit
+  const globalMaxZoom = 19;
   const [currentCenter, setCurrentCenter] = useState<LatLngTuple>(newYorkCenter);
 
-  // --- Handlers ---
   const handleToggleDrawing = () => {
     setSimulationMode(null);
     setDrawMode((prevMode) => (prevMode === 'polygon' ? null : 'polygon'));
@@ -384,14 +355,8 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     if (featureGroupRef.current) {
         if (!featureGroupRef.current.hasLayer(layer)) {
              featureGroupRef.current.addLayer(layer);
-             console.log("Shape added to FeatureGroup");
-        } else {
-            console.log("Layer already exists in FeatureGroup");
         }
-    } else {
-        console.error("featureGroupRef.current is null in handleLayerCreated");
     }
-
     if (onCoordinatesFinished && featureGroupRef.current) {
      try {
         const layers = featureGroupRef.current.getLayers();
@@ -418,7 +383,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     setPlacedParks([]);
     setDrawMode(null);
     setSimulationMode(null);
-    console.log('All shapes and simulation items cleared');
   };
 
   const toggleOverlayMenu = () => {
@@ -427,20 +391,22 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
 
   const handleOverlayChange = (overlay: Overlay) => {
     setSelectedOverlay(overlay);
-    console.log("Selected overlay:", overlay);
   };
 
+  // ✅ UPDATED: handleRecenter now ONLY recenters, doesn't find location
   const handleRecenter = () => {
-    console.log("Recenter clicked. Current mapRef:", mapRef.current);
-    if (mapRef.current) {
-        console.log("Flying to:", currentCenter, "Zoom:", defaultZoom);
-      mapRef.current.flyTo(currentCenter, defaultZoom);
-      mapRef.current.setMaxZoom(globalMaxZoom); // Reset max zoom on recenter
-      setSelectedOverlay('None');
-      setSimulationMode(null);
-    } else {
-        console.error("mapRef.current is null, cannot recenter.");
+    if (!mapRef.current) {
+      return;
     }
+    const map = mapRef.current;
+    
+    // Fly to the last known user location
+    map.flyTo(currentCenter, defaultZoom);
+
+    // Reset map state
+    map.setMaxZoom(globalMaxZoom);
+    setSelectedOverlay('None');
+    setSimulationMode(null);
   };
 
   const handleToggleSimulationMode = (mode: SimulationMode) => {
@@ -480,7 +446,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     }) => {
       const currentTotalClicks = treeClusters.length + solarClusters.length + placedPavementPoints.length + placedParks.length;
       if (currentTotalClicks >= MAX_CLUSTERS) {
-        console.log(`Max click limit (${MAX_CLUSTERS}) reached.`);
         triggerMaxClusterAlert();
         return;
       }
@@ -683,9 +648,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
           </div>
         )}
       </div>
-        <div className="absolute bg-[#25491B]  text-sm text-white p-4 right-[120px] top-[36px] z-2000 rounded-full cursor-pointer">
-          <button>Start Challenge</button>
-        </div>
+
        {/* Max Cluster Alert Message */}
        {showMaxClusterAlert && (
             <div
@@ -701,19 +664,18 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
       {/* The Leaflet Map Container */}
       <MapContainer
         ref={mapRef}
-        center={newYorkCenter}
-        zoom={defaultZoom}
+        center={newYorkCenter} // Start at default
+        zoom={13} // Start at a reasonable zoom
         className={`h-full w-full ${simulationMode ? 'cursor-crosshair' : ''}`}
         zoomControl={false}
         minZoom={3}
-        maxZoom={globalMaxZoom} // Apply overall max zoom
+        maxZoom={globalMaxZoom}
         maxBounds={worldBounds}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           noWrap={true}
-          // ✅ FIX: Explicitly set maxZoom for the base layer
           maxZoom={globalMaxZoom}
         />
 
@@ -724,8 +686,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
             attribution={waqiAttribution}
             opacity={0.7}
             pane="overlayPane"
-             // Allow air quality layer to zoom further if its source supports it
-             // maxZoom={globalMaxZoom} // Or leave unset if unknown
+            maxZoom={globalMaxZoom}
           />
         )}
         {selectedOverlay === "Tree Removal" && (
@@ -734,7 +695,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
             attribution={gfwAttribution}
             opacity={0.7}
             pane="overlayPane"
-            maxZoom={12} // Specific maxZoom for THIS layer's tiles
+            maxZoom={12}
             noWrap={true}
           />
         )}
@@ -748,13 +709,11 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
             <Marker key={`tree-${index}`} position={pos} icon={treeIcon} />
           ))}
         </MarkerClusterGroup>
-
         <MarkerClusterGroup chunkedLoading maxClusterRadius={20}>
           {placedSolarPanels.map((pos, index) => (
             <Marker key={`solar-${index}`} position={pos} icon={solarIcon} />
           ))}
         </MarkerClusterGroup>
-
         {placedPavementPoints.map((pavement) => (
            <Marker
              key={pavement.id}
@@ -762,7 +721,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
              icon={pavementIcon}
            />
         ))}
-
          {placedParks.map((park) => (
            <Marker
              key={park.id}
@@ -770,8 +728,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
              icon={parkIcon}
            />
         ))}
-
-        {/* Removed absolute positioned Start Challenge button */}
 
         {/* Controls and Controllers */}
         <DrawControl
@@ -787,6 +743,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
           treeLossZoom={treeLossZoom}
           globalMaxZoom={globalMaxZoom}
         />
+        {/* ✅ RE-ADDED LocationFinder to run on initial load */}
         <LocationFinder onLocationFound={setCurrentCenter} />
         <MapClickHandler
             simulationMode={simulationMode}
