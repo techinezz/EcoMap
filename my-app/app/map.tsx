@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ✅ 1. Imports
 import {
@@ -9,34 +9,35 @@ import {
   useMap,
   Marker,
   useMapEvents,
-  CircleMarker, // Keep CircleMarker if you might switch back
-} from 'react-leaflet';
-import L, { LatLngTuple, LatLng } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet-draw/dist/leaflet.draw.css';
-import { useEffect, useState, useRef, useCallback } from 'react';
-import 'leaflet-draw';
+} from "react-leaflet";
+import L, { LatLngTuple, LatLng } from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet-draw/dist/leaflet.draw.css";
+import { useEffect, useState, useRef, useCallback, FC } from "react";
+import "leaflet-draw";
+import { TargetLocation } from "./EcoMapOverlayComponent";
 
 // Marker Cluster Imports
-import MarkerClusterGroup from 'react-leaflet-markercluster';
-import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import MarkerClusterGroup from "react-leaflet-markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 // Turf Imports
-import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
-import { point as turfPoint, polygon as turfPolygon } from '@turf/helpers';
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import { point as turfPoint, polygon as turfPolygon } from "@turf/helpers";
 
-// ✅ 2. Icon Fix
+// Fix Leaflet’s default marker icon paths
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
-    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
 // ✅ 3. DrawControl Component
 function DrawControl({
+  // ... (This component is unchanged)
   drawMode,
   onDrawStop,
   onLayerCreated,
@@ -48,27 +49,27 @@ function DrawControl({
     const map = useMap();
     const drawInstanceRef = useRef<L.Draw.Polygon | null>(null);
 
-    useEffect(() => {
-        if (drawMode === 'polygon') {
-        drawInstanceRef.current = new L.Draw.Polygon(map as any, {
-            shapeOptions: {
-            color: '#488a36ff',
-            },
-        });
-        drawInstanceRef.current.enable();
-        } else {
-        if (drawInstanceRef.current) {
-            drawInstanceRef.current.disable();
-            drawInstanceRef.current = null;
-        }
-        }
-        return () => {
-        if (drawInstanceRef.current) {
-            drawInstanceRef.current.disable();
-            drawInstanceRef.current = null;
-        }
-        };
-    }, [drawMode, map]);
+  useEffect(() => {
+    if (drawMode === "polygon") {
+      drawInstanceRef.current = new L.Draw.Polygon(map as any, {
+        shapeOptions: {
+          color: "#488a36ff",
+        },
+      });
+      drawInstanceRef.current.enable();
+    } else {
+      if (drawInstanceRef.current) {
+        drawInstanceRef.current.disable();
+        drawInstanceRef.current = null;
+      }
+    }
+    return () => {
+      if (drawInstanceRef.current) {
+        drawInstanceRef.current.disable();
+        drawInstanceRef.current = null;
+      }
+    };
+  }, [drawMode, map]);
 
     useEffect(() => {
         const handleCreated = (e: L.LeafletEvent) => {
@@ -124,8 +125,11 @@ function MapController({
   treeLossZoom: number;
   globalMaxZoom: number;
 }) {
-  const map = useMap(); // Hook result
-  const prevOverlayRef = useRef<Overlay>(); // Ref
+  const map = useMap();
+  // --- 1. FIX HERE ---
+  // Initialized ref with a type that allows 'undefined'
+  const prevOverlayRef = useRef<Overlay | undefined>(undefined);
+  // --- END FIX ---
 
   useEffect(() => {
     // All variables in the dependency array are defined in this scope
@@ -134,13 +138,13 @@ function MapController({
     const prevOverlay = prevOverlayRef.current;
 
     if (prevOverlay !== selectedOverlay) {
-      if (selectedOverlay === 'Tree Removal') {
+      if (selectedOverlay === "Tree Removal") {
         const currentZoom = map.getZoom();
         if (currentZoom > treeLossZoom) {
           map.flyTo(currentCenter, treeLossZoom);
         }
         map.setMaxZoom(treeLossZoom);
-      } else if (prevOverlay === 'Tree Removal') {
+      } else if (prevOverlay === "Tree Removal") {
         map.setMaxZoom(globalMaxZoom);
       }
     }
@@ -150,7 +154,6 @@ function MapController({
   return null;
 }
 
-
 // ✅ 6. LocationFinder
 function LocationFinder({
   onLocationFound,
@@ -159,26 +162,27 @@ function LocationFinder({
 }) {
     const map = useMap();
 
-    useEffect(() => {
-        if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-            const { latitude, longitude } = position.coords;
-            const userCenter: LatLngTuple = [latitude, longitude];
-            map.flyTo(userCenter, 13);
-            onLocationFound(userCenter);
-            },
-            () => {
-            console.log('Geolocation permission denied. Staying at default location.');
-            },
-        );
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const userCenter: LatLngTuple = [latitude, longitude];
+          map.flyTo(userCenter, 13);
+          onLocationFound(userCenter);
+        },
+        () => {
+          console.log(
+            "Geolocation permission denied. Staying at default location."
+          );
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [map]);
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
 
     return null;
 }
-
 
 // ✅ 7. MapClickHandler
 function MapClickHandler({
@@ -191,7 +195,11 @@ function MapClickHandler({
   onMaxClustersReached,
 }: {
   simulationMode: SimulationMode;
-  featureGroupRef: React.RefObject<L.FeatureGroup>;
+  isTreeModeActive: boolean;
+  // --- 2. FIX HERE ---
+  // Changed type to allow null, matching the ref from the parent
+  featureGroupRef: React.RefObject<L.FeatureGroup | null>;
+  // --- END FIX ---
   brushSize: number;
   onItemPlaced: (data: {
     mode: SimulationMode;
@@ -270,7 +278,7 @@ function MapClickHandler({
 
 // ✅ 8. Define Custom Icons
 const treeIcon = L.icon({
-  iconUrl: '/placedtree.svg',
+  iconUrl: "/placedtree.svg",
   iconSize: [25, 25],
   iconAnchor: [12, 25],
 });
@@ -295,16 +303,33 @@ const parkIcon = L.icon({
 
 
 // ✅ 9. Main EcoMap Component
-export default function EcoMap({
-  onCoordinatesFinished,
-}: {
+// --- Helper Component ---
+function ChangeView({ target }: { target: TargetLocation | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) {
+      map.flyToBounds(target.bounds, { padding: [50, 50] });
+    }
+  }, [target, map]);
+
+  return null;
+}
+// --- END Helper ---
+
+// --- Props Interface ---
+interface EcoMapProps {
+  targetLocation: TargetLocation | null;
   onCoordinatesFinished?: (coordinates: any[]) => void;
-}) {
+}
+// --- END Props ---
+
+// --- Main Component ---
+const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup>(null);
   const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
-  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>('None'); // State variable
   const mapRef = useRef<L.Map>(null);
+  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
 
   // --- Simulation State ---
   const [simulationMode, setSimulationMode] = useState<SimulationMode>(null);
@@ -338,17 +363,20 @@ export default function EcoMap({
     if (featureGroupRef.current) {
       featureGroupRef.current.addLayer(layer);
     }
-    console.log('Shape added');
-    if (onCoordinatesFinished) {
-     if (featureGroupRef.current) {
-       const layers = featureGroupRef.current.getLayers();
-       const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
-       const allCoordinates = allGeoJSON.map(
-         (geojson) => geojson.geometry.coordinates,
-       );
+    console.log("Shape added");
+
+    if (featureGroupRef.current) {
+      const layers = featureGroupRef.current.getLayers();
+      const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
+      const allCoordinates = allGeoJSON.map(
+        (geojson) => geojson.geometry.coordinates
+      );
+
+      if (onCoordinatesFinished && allCoordinates.length > 0) {
         onCoordinatesFinished(allCoordinates);
       }
     }
+    setIsTreeModeActive(true);
   };
 
   const handleClearLayers = () => {
@@ -372,7 +400,7 @@ export default function EcoMap({
 
   const handleOverlayChange = (overlay: Overlay) => {
     setSelectedOverlay(overlay);
-    console.log('Selected overlay:', overlay);
+    console.log("Selected overlay:", overlay);
   };
 
   const handleRecenter = () => {
@@ -438,11 +466,18 @@ export default function EcoMap({
     setShowMaxClusterAlert(true);
     setTimeout(() => {
       setShowMaxClusterAlert(false);
-    }, 2500);
-  }, [showMaxClusterAlert]);
+    }, 3000);
+  }, []);
+
+  const handleDonePlanting = () => {
+    console.log("--- Tree Cluster Data ---");
+    console.log(JSON.stringify(treeClusters, null, 2));
+    console.log(`Total trees placed: ${placedTrees.length}`);
+    setIsTreeModeActive(false);
+  };
 
   const baseButtonClass =
-    'rounded-full border-none cursor-pointer transition-colors flex items-center justify-center h-12 w-12';
+    "rounded-full border-none cursor-pointer transition-colors flex items-center justify-center h-12 w-12";
 
   const totalClicksMade = treeClusters.length + solarClusters.length + placedPavementPoints.length + placedParks.length;
 
@@ -453,7 +488,7 @@ export default function EcoMap({
   const gfwAttribution =
     '&copy; <a href="https://www.globalforestwatch.org/">Global Forest Watch</a>';
   const treeLossUrl =
-    'https://storage.googleapis.com/earthenginepartners-hansen/tiles/gfc_v1.8/loss_year/{z}/{x}/{y}.png';
+    "https://storage.googleapis.com/earthenginepartners-hansen/tiles/gfc_v1.8/loss_year/{z}/{x}/{y}.png";
 
   return (
     <div className="relative h-screen w-full">
@@ -469,7 +504,7 @@ export default function EcoMap({
                 ? 'bg-green-100 ring-2 ring-green-500'
                 : 'bg-white hover:bg-gray-100'
             }`}
-             title="Draw Area"
+            title="Draw Area"
           >
             <img src="/pen-tool.svg" alt="Draw Area" className="w-7 h-7" />
           </button>
@@ -491,7 +526,7 @@ export default function EcoMap({
                 ? 'bg-green-100 ring-2 ring-green-500'
                 : 'bg-white hover:bg-gray-100'
             }`}
-             title="Map Overlays"
+            title="Map Overlays"
           >
             <img src="/map.svg" alt="Overlay" className="w-7 h-7" />
           </button>
@@ -559,7 +594,7 @@ export default function EcoMap({
 
         </div>
 
-        {/* Conditional Overlay Menu */}
+        {/* 4. Overlay Dropdown Menu */}
         {isOverlayMenuOpen && (
             <div className="w-64 bg-white rounded-xl shadow-lg p-4 z-[1001] self-end">
             <h3 className="text-sm font-semibold text-[#25491B] mb-3">
@@ -636,7 +671,6 @@ export default function EcoMap({
 
       {/* The Leaflet Map Container */}
       <MapContainer
-        ref={mapRef}
         center={newYorkCenter}
         zoom={defaultZoom}
         className={`h-full w-full ${simulationMode ? 'cursor-crosshair' : ''}`}
@@ -652,11 +686,23 @@ export default function EcoMap({
         />
 
         {/* Conditional Overlays */}
-        {selectedOverlay === 'Air Quality' && (
-          <TileLayer url={airQualityUrl} attribution={waqiAttribution} opacity={0.7} pane="overlayPane" />
+        {selectedOverlay === "Air Quality" && (
+          <TileLayer
+            url={airQualityUrl}
+            attribution={waqiAttribution}
+            opacity={0.7}
+            pane="overlayPane"
+          />
         )}
-        {selectedOverlay === 'Tree Removal' && (
-          <TileLayer url={treeLossUrl} attribution={gfwAttribution} opacity={0.7} pane="overlayPane" maxZoom={12} noWrap={true} />
+        {selectedOverlay === "Tree Removal" && (
+          <TileLayer
+            url={treeLossUrl}
+            attribution={gfwAttribution}
+            opacity={0.7}
+            pane="overlayPane"
+            maxZoom={12}
+            noWrap={true}
+          />
         )}
 
         {/* Drawing Feature Group */}
@@ -696,10 +742,20 @@ export default function EcoMap({
         </div>
 
         {/* Controls and Controllers */}
-        <DrawControl drawMode={drawMode} onDrawStop={() => setDrawMode(null)} onLayerCreated={handleLayerCreated} />
+        <DrawControl
+          drawMode={drawMode}
+          onDrawStop={() => setDrawMode(null)}
+          onLayerCreated={handleLayerCreated}
+        />
         <ZoomControl position="bottomright" />
+        <ChangeView target={targetLocation} />
+        <MapController
+          selectedOverlay={selectedOverlay}
+          currentCenter={currentCenter}
+          treeLossZoom={treeLossZoom}
+          globalMaxZoom={globalMaxZoom}
+        />
         <LocationFinder onLocationFound={setCurrentCenter} />
-        <MapController selectedOverlay={selectedOverlay} currentCenter={currentCenter} treeLossZoom={treeLossZoom} globalMaxZoom={globalMaxZoom} />
         <MapClickHandler
             simulationMode={simulationMode}
             featureGroupRef={featureGroupRef}
@@ -712,4 +768,6 @@ export default function EcoMap({
       </MapContainer>
     </div>
   );
-}
+};
+
+export default EcoMap;
