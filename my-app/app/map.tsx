@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ✅ 1. Imports
 import {
@@ -7,23 +7,39 @@ import {
   FeatureGroup,
   ZoomControl,
   useMap,
-} from 'react-leaflet';
-import L, { LatLngTuple } from 'leaflet'; // Import LatLngTuple
-import 'leaflet/dist/leaflet.css';
-import 'leaflet-draw/dist/leaflet.draw.css';
-import { useEffect, useState, useRef } from 'react';
-import 'leaflet-draw';
+  Marker,
+  useMapEvents,
+  // CircleMarker removed previously
+} from "react-leaflet";
+import L, { LatLngTuple, LatLng } from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet-draw/dist/leaflet.draw.css";
+import { useEffect, useState, useRef, useCallback, FC } from "react";
+import "leaflet-draw";
+// Assuming TargetLocation is defined correctly
+export interface TargetLocation {
+  bounds: L.LatLngBoundsExpression;
+}
+
+// Marker Cluster Imports
+import MarkerClusterGroup from "react-leaflet-markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+
+// Turf Imports
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import { point as turfPoint, polygon as turfPolygon } from "@turf/helpers";
 
 // ✅ 2. Icon Fix
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
-    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// ✅ 3. DrawControl Component (Typo fixed)
+// ✅ 3. DrawControl Component
 function DrawControl({
   drawMode,
   onDrawStop,
@@ -33,141 +49,360 @@ function DrawControl({
   onDrawStop: () => void;
   onLayerCreated: (layer: L.Layer) => void;
 }) {
-  const map = useMap();
-  const drawInstanceRef = useRef<L.Draw.Polygon | null>(null);
+    const map = useMap();
+    const drawInstanceRef = useRef<L.Draw.Polygon | null>(null);
 
-  useEffect(() => {
-    if (drawMode === 'polygon') {
-      drawInstanceRef.current = new L.Draw.Polygon(map as any, {
-        shapeOptions: {
-          color: '#488a36ff',
-        },
-      });
-      drawInstanceRef.current.enable();
-    } else {
-      if (drawInstanceRef.current) {
-        // Fixed typo here (was drawInstanceDrawef)
-        drawInstanceRef.current.disable(); 
-        drawInstanceRef.current = null;
-      }
-    }
-    return () => {
-      if (drawInstanceRef.current) {
-        drawInstanceRef.current.disable();
-        drawInstanceRef.current = null;
-      }
-    };
-  }, [drawMode, map]);
+    useEffect(() => {
+        if (drawMode === "polygon") {
+        drawInstanceRef.current = new L.Draw.Polygon(map as any, {
+            shapeOptions: {
+            color: "#488a36ff",
+            },
+        });
+        drawInstanceRef.current.enable();
+        } else {
+        if (drawInstanceRef.current) {
+            drawInstanceRef.current.disable();
+            drawInstanceRef.current = null;
+        }
+        }
+        return () => {
+        if (drawInstanceRef.current) {
+            drawInstanceRef.current.disable();
+            drawInstanceRef.current = null;
+        }
+        };
+    }, [drawMode, map]);
 
-  useEffect(() => {
-    const handleCreated = (e: L.LeafletEvent) => {
-      onLayerCreated(e.layer);
-    };
-    const handleDrawStop = () => {
-      onDrawStop();
-    };
-    map.on(L.Draw.Event.CREATED, handleCreated);
-    map.on(L.Draw.Event.DRAWSTOP, handleDrawStop);
-    return () => {
-      map.off(L.Draw.Event.CREATED, handleCreated);
-      map.off(L.Draw.Event.DRAWSTOP, handleDrawStop);
-    };
-  }, [map, onLayerCreated, onDrawStop]);
+    useEffect(() => {
+        const handleCreated = (e: any) => {
+        onLayerCreated(e.layer);
+        };
+        const handleDrawStop = () => {
+        onDrawStop();
+        };
 
-  return null;
+        map.on(L.Draw.Event.CREATED, handleCreated);
+        map.on(L.Draw.Event.DRAWSTOP, handleDrawStop);
+
+        return () => {
+        map.off(L.Draw.Event.CREATED, handleCreated);
+        map.off(L.Draw.Event.DRAWSTOP, handleDrawStop);
+        };
+    }, [map, onLayerCreated, onDrawStop]);
+
+    return null;
 }
 
-// ✅ 4. Overlay Types
+
+// ✅ 4. Overlay, Cluster & Simulation Types
 type Overlay = 'None' | 'Air Quality' | 'Tree Removal';
 const OVERLAYS: Overlay[] = ['None', 'Air Quality', 'Tree Removal'];
 
+type SimulationMode = 'trees' | 'solar' | 'pavement' | 'park' | null;
+
+interface PointCluster {
+  id: string;
+  center: LatLngTuple;
+  count: number;
+}
+
+interface PointPlacement {
+    id: string;
+    center: LatLngTuple;
+}
+
 // Define the world boundaries
 const worldBounds: L.LatLngBoundsExpression = [
-  [-90, -180], // Southwest corner (lat, lng)
-  [90, 180], // Northeast corner (lat, lng)
+  [-90, -180], // Southwest
+  [90, 180], // Northeast
 ];
 
-// ✅ 5. UPDATED: MapController with smarter zoom logic
+// ✅ 5. MapController
 function MapController({
   selectedOverlay,
-  defaultCenter,
+  currentCenter,
   treeLossZoom,
   globalMaxZoom,
 }: {
   selectedOverlay: Overlay;
-  defaultCenter: LatLngTuple;
+  currentCenter: LatLngTuple;
   treeLossZoom: number;
   globalMaxZoom: number;
 }) {
   const map = useMap();
-  const prevOverlayRef = useRef<Overlay>();
+  const prevOverlayRef = useRef<Overlay | undefined>(undefined);
 
   useEffect(() => {
     const prevOverlay = prevOverlayRef.current;
 
     if (prevOverlay !== selectedOverlay) {
-      if (selectedOverlay === 'Tree Removal') {
-        // Switched TO Tree Removal
+      if (selectedOverlay === "Tree Removal") {
         const currentZoom = map.getZoom();
-
-        // Only fly if user is zoomed IN further than the target zoom
         if (currentZoom > treeLossZoom) {
-          map.flyTo(defaultCenter, treeLossZoom);
+          map.flyTo(currentCenter, treeLossZoom);
         }
-        
-        // Always lock the max zoom
-        map.setMaxZoom(treeLossZoom);
-
-      } else if (prevOverlay === 'Tree Removal') {
-        // Switched FROM Tree Removal: Just unlock max zoom
-        map.setMaxZoom(globalMaxZoom);
+        map.setMaxZoom(treeLossZoom); // Set map's max zoom
+      } else if (prevOverlay === "Tree Removal") {
+        map.setMaxZoom(globalMaxZoom); // Reset map's max zoom
       }
-      // If switching between 'None' and 'Air Quality', do nothing.
     }
-
     prevOverlayRef.current = selectedOverlay;
-  }, [selectedOverlay, map, defaultCenter, treeLossZoom, globalMaxZoom]);
+  }, [selectedOverlay, map, currentCenter, treeLossZoom, globalMaxZoom]);
 
   return null;
 }
 
-// ✅ 6. EcoMap Component
-export default function EcoMap({
-  onCoordinatesFinished,
+// ✅ 6. LocationFinder
+function LocationFinder({
+  onLocationFound,
 }: {
-  onCoordinatesFinished?: (coordinates: any[]) => void;
+  onLocationFound: (center: LatLngTuple) => void;
 }) {
-  const [drawMode, setDrawMode] = useState<string | null>(null);
-  const featureGroupRef = useRef<L.FeatureGroup>(null);
-  const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
-  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>('None');
+    const map = useMap();
 
-  // --- Define map locations and zooms ---
+  useEffect(() => {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const userCenter: LatLngTuple = [latitude, longitude];
+          console.log("Location found:", userCenter);
+          map.flyTo(userCenter, 13);
+          onLocationFound(userCenter);
+        },
+        () => {
+          console.log(
+            "Geolocation permission denied or error. Staying at default location."
+          );
+        }
+      );
+    } else {
+        console.log("Geolocation is not supported or not available in this environment.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, onLocationFound]);
+
+    return null;
+}
+
+// ✅ 7. MapClickHandler
+function MapClickHandler({
+  simulationMode,
+  featureGroupRef,
+  brushSize,
+  onItemPlaced,
+  maxClusters,
+  currentClusterCount,
+  onMaxClustersReached,
+}: {
+  simulationMode: SimulationMode;
+  featureGroupRef: React.RefObject<L.FeatureGroup | null>;
+  brushSize: number;
+  onItemPlaced: (data: {
+    mode: SimulationMode;
+    center: LatLngTuple;
+    count?: number;
+    individualPoints?: LatLngTuple[];
+  }) => void;
+  maxClusters: number;
+  currentClusterCount: number;
+  onMaxClustersReached: () => void;
+}) {
+    const isPointInPolygons = useCallback((point: L.LatLng): boolean => {
+        if (!featureGroupRef.current) {
+            console.log("FeatureGroup ref is null in isPointInPolygons");
+            return false;
+        }
+
+        const turfPt = turfPoint([point.lng, point.lat]);
+        let isInside = false;
+
+        featureGroupRef.current.eachLayer((layer) => {
+        if (layer instanceof L.Polygon) {
+            const latLngs = layer.getLatLngs();
+            const ring = Array.isArray(latLngs[0]) ? latLngs[0] as L.LatLng[] : latLngs as L.LatLng[];
+
+            const geoJsonCoords = ring.map((latlng) => [latlng.lng, latlng.lat]);
+            if (
+            geoJsonCoords.length > 0 &&
+            (geoJsonCoords[0][0] !== geoJsonCoords[geoJsonCoords.length - 1][0] ||
+            geoJsonCoords[0][1] !== geoJsonCoords[geoJsonCoords.length - 1][1])
+            ) {
+            geoJsonCoords.push(geoJsonCoords[0]);
+            }
+            if (geoJsonCoords.length < 4) {
+                console.warn("Skipping invalid polygon for point check:", geoJsonCoords);
+                return;
+            }
+            try {
+                const turfPoly = turfPolygon([geoJsonCoords]);
+                if (booleanPointInPolygon(turfPt, turfPoly)) {
+                    isInside = true;
+                }
+            } catch (error) {
+                 console.error("Error creating Turf polygon:", error, geoJsonCoords);
+            }
+
+        }
+        });
+        return isInside;
+    }, [featureGroupRef]);
+
+
+  useMapEvents({
+    click(e) {
+      if (!simulationMode) return;
+
+      if (currentClusterCount >= maxClusters) {
+        console.log(`Maximum click limit (${maxClusters}) reached!`);
+        onMaxClustersReached();
+        return;
+      }
+
+      if (isPointInPolygons(e.latlng)) {
+        const center: LatLngTuple = [e.latlng.lat, e.latlng.lng];
+
+        if (simulationMode === 'trees' || simulationMode === 'solar') {
+          const count = brushSize;
+          const individualPoints: LatLngTuple[] = [];
+          const scatterRadius = 0.0005;
+
+          for (let i = 0; i < count; i++) {
+            const offsetX = (Math.random() - 0.5) * scatterRadius * 2;
+            const offsetY = (Math.random() - 0.5) * scatterRadius * 2;
+            individualPoints.push([center[0] + offsetY, center[1] + offsetX]);
+          }
+          onItemPlaced({ mode: simulationMode, center, count, individualPoints });
+
+        } else if (simulationMode === 'pavement' || simulationMode === 'park') {
+          onItemPlaced({ mode: simulationMode, center });
+        }
+      } else {
+        if(simulationMode) {
+            console.log(`Click outside drawn polygons. Place ${simulationMode} inside!`);
+        }
+      }
+    },
+  });
+
+  return null;
+}
+
+// ✅ 8. Define Custom Icons
+const treeIcon = L.icon({
+  iconUrl: "/placedtree.svg",
+  iconSize: [25, 25],
+  iconAnchor: [12, 25],
+});
+
+const solarIcon = L.icon({
+  iconUrl: '/sun.svg',
+  iconSize: [25, 25],
+  iconAnchor: [12, 12],
+});
+
+const pavementIcon = L.icon({
+    iconUrl: '/road.svg',
+    iconSize: [25, 25],
+    iconAnchor: [12, 12],
+});
+
+const parkIcon = L.icon({
+    iconUrl: '/park.svg',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+});
+
+
+// ✅ 9. Main EcoMap Component
+// --- Helper Component ---
+function ChangeView({ target }: { target: TargetLocation | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target && target.bounds) {
+        try {
+            const bounds = L.latLngBounds(target.bounds);
+            if (bounds.isValid()) {
+                map.flyToBounds(bounds, { padding: [50, 50] });
+            } else {
+                console.error("Invalid bounds provided to ChangeView:", target.bounds);
+            }
+        } catch (error) {
+             console.error("Error flying to bounds in ChangeView:", error, target.bounds);
+        }
+
+    }
+  }, [target, map]);
+
+  return null;
+}
+
+// --- Props Interface ---
+interface EcoMapProps {
+  targetLocation: TargetLocation | null;
+  onCoordinatesFinished?: (coordinates: any[]) => void;
+}
+
+// --- Main Component ---
+const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
+  const [drawMode, setDrawMode] = useState<string | null>(null);
+  const featureGroupRef = useRef<L.FeatureGroup | null>(null);
+  const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
+  const mapRef = useRef<L.Map>(null);
+  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
+
+  // --- Simulation State ---
+  const [simulationMode, setSimulationMode] = useState<SimulationMode>(null);
+  const [brushSize, setBrushSize] = useState(10);
+  const [placedTrees, setPlacedTrees] = useState<LatLngTuple[]>([]);
+  const [treeClusters, setTreeClusters] = useState<PointCluster[]>([]);
+  const [placedSolarPanels, setPlacedSolarPanels] = useState<LatLngTuple[]>([]);
+  const [solarClusters, setSolarClusters] = useState<PointCluster[]>([]);
+  const [placedPavementPoints, setPlacedPavementPoints] = useState<PointPlacement[]>([]);
+  const [placedParks, setPlacedParks] = useState<PointPlacement[]>([]);
+
+  const MAX_CLUSTERS = 20;
+
+  // --- Alert State ---
+  const [showMaxClusterAlert, setShowMaxClusterAlert] = useState(false);
+
+  // --- Map locations and zooms ---
   const newYorkCenter: LatLngTuple = [40.7128, -74.006];
   const defaultZoom = 13;
-  const treeLossZoom = 11; // Target zoom out for tree loss
-  const globalMaxZoom = 19; // Default max zoom for OSM
+  const treeLossZoom = 11;
+  const globalMaxZoom = 19; // Keep this as the overall max zoom limit
+  const [currentCenter, setCurrentCenter] = useState<LatLngTuple>(newYorkCenter);
 
+  // --- Handlers ---
   const handleToggleDrawing = () => {
+    setSimulationMode(null);
     setDrawMode((prevMode) => (prevMode === 'polygon' ? null : 'polygon'));
   };
 
-  const handleLayerCreated = (layer: L.Layer) => {
+   const handleLayerCreated = (layer: L.Layer) => {
     if (featureGroupRef.current) {
-      featureGroupRef.current.addLayer(layer);
+        if (!featureGroupRef.current.hasLayer(layer)) {
+             featureGroupRef.current.addLayer(layer);
+             console.log("Shape added to FeatureGroup");
+        } else {
+            console.log("Layer already exists in FeatureGroup");
+        }
+    } else {
+        console.error("featureGroupRef.current is null in handleLayerCreated");
     }
-    console.log('Shape added');
 
-    if (featureGroupRef.current) {
-      const layers = featureGroupRef.current.getLayers();
-      const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
-      const allCoordinates = allGeoJSON.map(
-        (geojson) => geojson.geometry.coordinates,
-      );
-
-      if (onCoordinatesFinished && allCoordinates.length > 0) {
+    if (onCoordinatesFinished && featureGroupRef.current) {
+     try {
+        const layers = featureGroupRef.current.getLayers();
+        const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
+        const allCoordinates = allGeoJSON.map(
+         (geojson) => geojson.geometry.coordinates,
+        );
         onCoordinatesFinished(allCoordinates);
-      }
+     } catch (error) {
+        console.error("Error processing layer coordinates:", error);
+     }
     }
   };
 
@@ -175,8 +410,15 @@ export default function EcoMap({
     if (featureGroupRef.current) {
       featureGroupRef.current.clearLayers();
     }
+    setPlacedTrees([]);
+    setTreeClusters([]);
+    setPlacedSolarPanels([]);
+    setSolarClusters([]);
+    setPlacedPavementPoints([]);
+    setPlacedParks([]);
     setDrawMode(null);
-    console.log('All shapes cleared');
+    setSimulationMode(null);
+    console.log('All shapes and simulation items cleared');
   };
 
   const toggleOverlayMenu = () => {
@@ -185,13 +427,87 @@ export default function EcoMap({
 
   const handleOverlayChange = (overlay: Overlay) => {
     setSelectedOverlay(overlay);
-    console.log('Selected overlay:', overlay);
+    console.log("Selected overlay:", overlay);
   };
 
-  const baseButtonClass =
-    'rounded-full border-none cursor-pointer transition-colors flex items-center justify-center h-12 w-12';
+  const handleRecenter = () => {
+    console.log("Recenter clicked. Current mapRef:", mapRef.current);
+    if (mapRef.current) {
+        console.log("Flying to:", currentCenter, "Zoom:", defaultZoom);
+      mapRef.current.flyTo(currentCenter, defaultZoom);
+      mapRef.current.setMaxZoom(globalMaxZoom); // Reset max zoom on recenter
+      setSelectedOverlay('None');
+      setSimulationMode(null);
+    } else {
+        console.error("mapRef.current is null, cannot recenter.");
+    }
+  };
 
-  // --- Tile Layer Definitions ---
+  const handleToggleSimulationMode = (mode: SimulationMode) => {
+     setDrawMode(null);
+     setSimulationMode(prevMode => prevMode === mode ? null : mode);
+  };
+
+  const handleBrushSizeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setBrushSize(Number(event.target.value));
+  };
+
+  const handleDoneSimulating = () => {
+    console.log('--- Simulation Data ---');
+    console.log('Tree Cluster data:', treeClusters);
+    console.log('Solar Cluster data:', solarClusters);
+    console.log('Pavement Point data:', placedPavementPoints);
+    console.log('Park Point data:', placedParks);
+    console.log('--- End Simulation Data ---');
+    setSimulationMode(null);
+  };
+
+  const triggerMaxClusterAlert = useCallback(() => {
+    if (showMaxClusterAlert) return;
+    setShowMaxClusterAlert(true);
+    const timer = setTimeout(() => {
+      setShowMaxClusterAlert(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [showMaxClusterAlert]);
+
+  const handleItemPlaced = useCallback(
+    (data: {
+      mode: SimulationMode;
+      center: LatLngTuple;
+      count?: number;
+      individualPoints?: LatLngTuple[];
+    }) => {
+      const currentTotalClicks = treeClusters.length + solarClusters.length + placedPavementPoints.length + placedParks.length;
+      if (currentTotalClicks >= MAX_CLUSTERS) {
+        console.log(`Max click limit (${MAX_CLUSTERS}) reached.`);
+        triggerMaxClusterAlert();
+        return;
+      }
+
+      const { mode, center, count, individualPoints } = data;
+      const newItemId = Date.now().toString();
+
+      if (mode === 'trees' && count && individualPoints) {
+        setTreeClusters((prev) => [...prev, { id: newItemId, center, count }]);
+        setPlacedTrees((prev) => [...prev, ...individualPoints]);
+      } else if (mode === 'solar' && count && individualPoints) {
+        setSolarClusters((prev) => [...prev, { id: newItemId, center, count }]);
+        setPlacedSolarPanels((prev) => [...prev, ...individualPoints]);
+      } else if (mode === 'pavement') {
+        setPlacedPavementPoints((prev) => [...prev, { id: newItemId, center }]);
+      } else if (mode === 'park') {
+        setPlacedParks((prev) => [...prev, { id: newItemId, center }]);
+      }
+    },
+    [treeClusters.length, solarClusters.length, placedPavementPoints.length, placedParks.length, triggerMaxClusterAlert]
+  );
+
+  const baseButtonClass =
+    "rounded-full border-none cursor-pointer transition-colors flex items-center justify-center h-12 w-12";
+
+  const totalClicksMade = treeClusters.length + solarClusters.length + placedPavementPoints.length + placedParks.length;
+
   const waqiAttribution =
     '&copy; <a href="https://waqi.info/">World Air Quality Index</a>';
   const airQualityUrl = `https://tiles.waqi.info/tiles/usepa-aqi/{z}/{x}/{y}.png?token=${process.env.NEXT_PUBLIC_AIR_QUALITY_KEY}`;
@@ -199,139 +515,289 @@ export default function EcoMap({
   const gfwAttribution =
     '&copy; <a href="https://www.globalforestwatch.org/">Global Forest Watch</a>';
   const treeLossUrl =
-    'https://storage.googleapis.com/earthenginepartners-hansen/tiles/gfc_v1.8/loss_year/{z}/{x}/{y}.png';
+    "https://storage.googleapis.com/earthenginepartners-hansen/tiles/gfc_v1.8/loss_year/{z}/{x}/{y}.png";
 
   return (
     <div className="relative h-screen w-full">
-      {/* Button container (No changes) */}
-      <div className="absolute top-[42px] left-[880px] z-[1000]">
+      {/* Button container */}
+      <div className="absolute top-[36px] left-[880px] z-[1000] flex flex-col items-end gap-2">
+        {/* Top row of buttons */}
         <div className="bg-white rounded-full shadow-md flex flex-row items-center p-1.5 gap-1.5">
-          {/* 1. Pen Button */}
+          {/* Pen Button */}
           <button
             onClick={handleToggleDrawing}
-            className={`${baseButtonClass}  ${
+            className={`${baseButtonClass} ${
               drawMode === 'polygon'
-                ? 'bg-[rgba(171,210,169,0.44)] hover:bg-[rgba(171,210,169,0.6)]'
+                ? 'bg-green-100 ring-2 ring-green-500'
                 : 'bg-white hover:bg-gray-100'
             }`}
+            title="Draw Area"
           >
             <img src="/pen-tool.svg" alt="Draw Area" className="w-7 h-7" />
           </button>
 
-          {/* 2. Eraser Button */}
+          {/* Eraser Button */}
           <button
             onClick={handleClearLayers}
             className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`}
+            title="Clear Shapes & Items"
           >
             <img src="/eraser.svg" alt="Clear All" className="w-7 h-7" />
           </button>
 
-          {/* 3. Map/Overlay Button */}
+          {/* Map/Overlay Button */}
           <button
             onClick={toggleOverlayMenu}
             className={`${baseButtonClass} ${
               isOverlayMenuOpen
-                ? 'bg-[rgba(171,210,169,0.44)] hover:bg-[rgba(171,210,169,0.6)]'
+                ? 'bg-green-100 ring-2 ring-green-500'
                 : 'bg-white hover:bg-gray-100'
             }`}
+            title="Map Overlays"
           >
             <img src="/map.svg" alt="Overlay" className="w-7 h-7" />
           </button>
+
+          {/* Recenter Button */}
+          <button
+            onClick={handleRecenter}
+            className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`}
+            title="Center on My Location"
+          >
+            <img src="/gps.svg" alt="Center on my location" className="w-7 h-7" />
+          </button>
+
+          {/* Tree Planting Button */}
+          <button
+            onClick={() => handleToggleSimulationMode('trees')}
+            className={`${baseButtonClass} ${
+              simulationMode === 'trees'
+                ? 'bg-green-100 ring-2 ring-green-500'
+                : 'bg-white hover:bg-gray-100'
+            }`}
+            title="Plant Trees"
+          >
+            <img src="/tree.svg" alt="Plant Trees" className="w-7 h-7" />
+          </button>
+
+          {/* Solar Panel Button */}
+          <button
+            onClick={() => handleToggleSimulationMode('solar')}
+            className={`${baseButtonClass} ${
+              simulationMode === 'solar'
+                ? 'bg-yellow-100 ring-2 ring-yellow-500'
+                : 'bg-white hover:bg-gray-100'
+            }`}
+            title="Place Solar Panels"
+          >
+            <img src="/sun.svg" alt="Place Solar Panels" className="w-7 h-7" />
+          </button>
+
+          {/* Permeable Pavement Button */}
+          <button
+            onClick={() => handleToggleSimulationMode('pavement')}
+            className={`${baseButtonClass} ${
+              simulationMode === 'pavement'
+                ? 'bg-blue-100 ring-2 ring-blue-500'
+                : 'bg-white hover:bg-gray-100'
+            }`}
+            title="Add Permeable Pavement"
+          >
+             <img src="/road.svg" alt="Add Permeable Pavement" className="w-7 h-7" />
+          </button>
+
+          {/* Park Button */}
+           <button
+            onClick={() => handleToggleSimulationMode('park')}
+            className={`${baseButtonClass} ${
+              simulationMode === 'park'
+                ? 'bg-lime-100 ring-2 ring-lime-500'
+                : 'bg-white hover:bg-gray-100'
+            }`}
+            title="Add Park Area"
+          >
+             <img src="/park.svg" alt="Add Park Area" className="w-7 h-7" />
+          </button>
+
         </div>
 
-        {/* 4. Overlay Dropdown Menu (No changes) */}
+        {/* Overlay Dropdown Menu */}
         {isOverlayMenuOpen && (
-          <div className="absolute top-full mt-2 w-56 bg-white rounded-xl shadow-lg p-4 z-[1001]">
+            <div className="w-64 bg-white rounded-xl shadow-lg p-4 z-[1001] self-end">
             <h3 className="text-sm font-semibold text-[#25491B] mb-3">
-              Map Overlays
+                Map Overlays
             </h3>
             <div className="space-y-3 text-sm">
-              {OVERLAYS.map((overlay) => (
-                <label
-                  key={overlay}
-                  className="flex items-center cursor-pointer"
-                >
-                  <input
+                {OVERLAYS.map((overlay) => (
+                <label key={overlay} className="flex items-center cursor-pointer">
+                    <input
                     type="radio"
                     name="overlay-selection"
                     value={overlay}
                     checked={selectedOverlay === overlay}
                     onChange={() => handleOverlayChange(overlay)}
                     className="sr-only peer"
-                  />
-                  <span
-                    className="
-                      h-4 w-4 rounded-full border-2 border-[#25491B]
-                      bg-white transition-colors duration-150
-                      peer-checked:bg-[#25491B] peer-checked:border-[#25491B]
-                    "
-                  ></span>
-                  <span className="ml-2 text-[#25491B]">{overlay}</span>
+                    />
+                    <span className="h-4 w-4 rounded-full border-2 border-[#25491B] bg-white transition-colors duration-150 peer-checked:bg-[#25491B] peer-checked:border-[#25491B]"></span>
+                    <span className="ml-2 text-[#25491B]">{overlay}</span>
                 </label>
-              ))}
+                ))}
             </div>
+            </div>
+        )}
+
+        {/* Conditional Simulation UI */}
+        {simulationMode && (
+          <div className="w-64 bg-white rounded-xl shadow-lg p-4 z-[1001] self-end">
+            <label htmlFor="brushSize" className="block text-sm font-medium text-[#25491B]">
+              {simulationMode === 'trees' && 'Trees per click:'}
+              {simulationMode === 'solar' && 'Panels per click:'}
+              {simulationMode === 'pavement' && 'Pavement Placement (1 per click)'}
+              {simulationMode === 'park' && 'Park Placement (1 per click)'}
+              {(simulationMode === 'trees' || simulationMode === 'solar') && (
+                 <span className="font-semibold"> {brushSize}</span>
+              )}
+               <span className="block text-xs text-gray-500 mt-1">
+                 Total Clicks: {totalClicksMade} / {MAX_CLUSTERS}
+               </span>
+            </label>
+             {(simulationMode === 'trees' || simulationMode === 'solar') && (
+                <input
+                id="brushSize"
+                type="range"
+                min="1"
+                max="100"
+                value={brushSize}
+                onChange={handleBrushSizeChange}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 mt-1 mb-3 accent-[#488a36]"
+                disabled={totalClicksMade >= MAX_CLUSTERS}
+                />
+             )}
+
+            <button
+              onClick={handleDoneSimulating}
+              className="w-full mt-2 px-4 py-2 bg-[#488a36] text-white rounded-md hover:bg-[#3a6e2b] transition-colors text-sm"
+            >
+              Done Simulating & Log Data
+            </button>
           </div>
         )}
       </div>
 
+       {/* Max Cluster Alert Message */}
+       {showMaxClusterAlert && (
+            <div
+            className="absolute top-10 left-1/2 transform -translate-x-1/2 z-[99999]
+                        px-4 py-2 bg-red-500/70
+                        text-white text-sm rounded-md shadow-lg
+                        transition-opacity duration-300"
+            >
+            Maximum number of clicks ({MAX_CLUSTERS}) reached!
+            </div>
+       )}
+
       {/* The Leaflet Map Container */}
       <MapContainer
+        ref={mapRef}
         center={newYorkCenter}
         zoom={defaultZoom}
-        className="h-full w-full"
+        className={`h-full w-full ${simulationMode ? 'cursor-crosshair' : ''}`}
         zoomControl={false}
         minZoom={3}
-        maxZoom={globalMaxZoom} // Set the default max zoom
+        maxZoom={globalMaxZoom} // Apply overall max zoom
         maxBounds={worldBounds}
       >
-        {/* 1. Base Map Layer */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           noWrap={true}
+          // ✅ FIX: Explicitly set maxZoom for the base layer
+          maxZoom={globalMaxZoom}
         />
 
-        {/* 2. Conditional Overlay Layers */}
-
-        {/* Air Quality Layer (WAQI Dots/Numbers) */}
-        {selectedOverlay === 'Air Quality' && (
+        {/* Conditional Overlays */}
+        {selectedOverlay === "Air Quality" && (
           <TileLayer
             url={airQualityUrl}
             attribution={waqiAttribution}
             opacity={0.7}
             pane="overlayPane"
+             // Allow air quality layer to zoom further if its source supports it
+             // maxZoom={globalMaxZoom} // Or leave unset if unknown
           />
         )}
-
-        {/* Tree Removal Layer (GFW Pink) */}
-        {selectedOverlay === 'Tree Removal' && (
+        {selectedOverlay === "Tree Removal" && (
           <TileLayer
             url={treeLossUrl}
             attribution={gfwAttribution}
             opacity={0.7}
             pane="overlayPane"
-            maxZoom={12} // This tells the *tile layer* to stretch
+            maxZoom={12} // Specific maxZoom for THIS layer's tiles
             noWrap={true}
           />
         )}
 
-        {/* 3. Drawing and Controls (No changes) */}
-        <FeatureGroup ref={featureGroupRef} />
+        {/* Drawing Feature Group */}
+        <FeatureGroup ref={featureGroupRef as React.RefObject<L.FeatureGroup<any>> | null} />
+
+        {/* Placed Items Layers */}
+        <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
+          {placedTrees.map((pos, index) => (
+            <Marker key={`tree-${index}`} position={pos} icon={treeIcon} />
+          ))}
+        </MarkerClusterGroup>
+
+        <MarkerClusterGroup chunkedLoading maxClusterRadius={20}>
+          {placedSolarPanels.map((pos, index) => (
+            <Marker key={`solar-${index}`} position={pos} icon={solarIcon} />
+          ))}
+        </MarkerClusterGroup>
+
+        {placedPavementPoints.map((pavement) => (
+           <Marker
+             key={pavement.id}
+             position={pavement.center}
+             icon={pavementIcon}
+           />
+        ))}
+
+         {placedParks.map((park) => (
+           <Marker
+             key={park.id}
+             position={park.center}
+             icon={parkIcon}
+           />
+        ))}
+
+        {/* Removed absolute positioned Start Challenge button */}
+
+        {/* Controls and Controllers */}
         <DrawControl
           drawMode={drawMode}
           onDrawStop={() => setDrawMode(null)}
           onLayerCreated={handleLayerCreated}
         />
         <ZoomControl position="bottomright" />
-
-        {/* ✅ 6. Add the controller to the map */}
+        <ChangeView target={targetLocation} />
         <MapController
           selectedOverlay={selectedOverlay}
-          defaultCenter={newYorkCenter}
+          currentCenter={currentCenter}
           treeLossZoom={treeLossZoom}
           globalMaxZoom={globalMaxZoom}
+        />
+        <LocationFinder onLocationFound={setCurrentCenter} />
+        <MapClickHandler
+            simulationMode={simulationMode}
+            featureGroupRef={featureGroupRef as React.RefObject<L.FeatureGroup<any>> | null}
+            brushSize={brushSize}
+            onItemPlaced={handleItemPlaced}
+            maxClusters={MAX_CLUSTERS}
+            currentClusterCount={totalClicksMade}
+            onMaxClustersReached={triggerMaxClusterAlert}
         />
       </MapContainer>
     </div>
   );
-}
+};
+
+export default EcoMap;
