@@ -24,13 +24,21 @@ export default function CircularAudioVisualizer({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, size, size);
+    // Clear canvas with a visible background
+    ctx.fillStyle = '#f3f4f6'; // Light gray background
+    ctx.fillRect(0, 0, size, size);
 
     const centerX = size / 2;
     const centerY = size / 2;
     const radius = size / 4;
     const bufferLength = audioData.length;
+
+    // Draw center circle for reference
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = '#d1d5db'; // Gray circle
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     // Draw circular bars
     for (let i = 0; i < barCount; i++) {
