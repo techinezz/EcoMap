@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.19.0",
+    "@elevenlabs/react": "^0.8.0",
     "@google/generative-ai": "^0.24.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
