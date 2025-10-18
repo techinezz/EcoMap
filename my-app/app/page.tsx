@@ -16,14 +16,18 @@ export default function Home() {
       {/* Chat Toggle Button */}
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
-        className="fixed top-4 right-4 z-[1000] p-3 rounded-full bg-[#ABD2A9] text-white hover:bg-[#9BC299] shadow-lg transition-colors"
+        className="fixed top-10 right-10 z-[1000] p-3 rounded-full bg-[#25491B] text-white hover:bg-[#25491B] shadow-lg transition-colors"
       >
-        <Bot size={24} />
+{isChatOpen ? (
+          <img src="/close.svg" alt="Close chat" className="w-6 h-6" />
+        ) : (
+          <Bot size={24} />
+        )}
       </button>
 
       {/* Chat Overlay */}
       {isChatOpen && (
-        <div className="fixed top-16 right-4 z-[1000] w-96 h-[600px] bg-white rounded-lg shadow-2xl overflow-hidden">
+        <div className="fixed top-25 right-9 z-[1000] w-96 h-[600px] bg-white rounded-lg shadow-2xl overflow-hidden">
           <AIChat />
         </div>
       )}

@@ -1,7 +1,3 @@
-// Card
-// Title + Icon
-// Hamburger Icon for Menu
-// Section with radio buttons
 "use client";
 import React, { useState } from "react";
 
@@ -22,47 +18,55 @@ export default function EcoMapOverlayComponent() {
   const handleOverlayChange = (overlay: Overlay) => {
     // This function updates the state with the value of the button that was clicked
     setSelectedOverlay(overlay);
-
-    // NOTE: You might add logic here later, like:
-    // if (overlay === "Air Quality") { // show air quality data on the map }
   };
 
   return (
-    // The outer container:
-    //  - bg-white: White background
-    //  - rounded-xl: Large rounded corners
-    //  - p-3: Padding inside
-    //  - border: Border around the element
-    //  - border-green-600: Green border color
-    <div className="bg-white rounded-3xl p-5 py-6 border border-green-700 shadow-lg w-72">
+    <div
+      className={`
+        bg-white shadow-lg w-82 mt-[20] ml-10 shadow-md 
+        px-5 
+        overflow-hidden
+        ${
+          isOpen
+            ? "max-h-96 rounded-3xl py-3 pb-[1.2vw]"
+            : "max-h-20 rounded-full py-3 pb-[.7vw]"
+        }
+      `}
+    >
       <div className="flex items-center justify-between">
-        {/* flex: Makes children (logo/title and button) line up horizontally
-                      items-center: Vertically centers them
-                      justify-between: Pushes logo/title to the left and button to the right
-                  */}
-
-        <div className="flex items-center space-x-2">
-          <span className="text-green-700 text-3xl">🌱</span>{" "}
-          {/* Green text, larger size */}
+        <div className="flex items-center space-x-2 pl-3">
+          <img
+            src="/logo.svg"
+            alt="EcoMap's Logo"
+            className="w-9 h-9 "
+          />
           <h1 className="text-xl font-semibold text-green-800">EcoMap</h1>
         </div>
 
         <button className="text-2xl text-green-700" onClick={toggleMenu}>
-          {isOpen ? "x" : "☰"}
+          <img
+            src="/menu.svg"
+            alt="EcoMap's Logo"
+            className="w-5 h-5 mr-2"
+          />
         </button>
       </div>
 
       {isOpen && (
-        <div className="pt-4 mt-2 border-gray-200">
-          <h2 className="text-lg font-medium mb-3">Overlays</h2>
+        <div className="pt-4 mt-[-7px] border-gray-200 text-[#25491B] ml-1">
+          <h2 className="text-md font-bold mb-2 ">Overlays</h2>
 
           {/* 2. The radio buttons are visible when open */}
-          <div className="space-y-2 text-sm">
+          <div className="space-y-2 text-sm ">
             {OVERLAYS.map((overlay) => (
               <label
                 key={overlay} // Important for React list performance
                 className="flex items-center cursor-pointer"
               >
+                {/* ✅ 1. The REAL radio button is hidden but still functional.
+                    - 'sr-only' hides it visually but keeps it for accessibility.
+                    - 'peer' tells Tailwind to watch its state.
+                */}
                 <input
                   type="radio"
                   name="overlay-selection" // Groups all buttons so only one can be selected
@@ -72,9 +76,28 @@ export default function EcoMapOverlayComponent() {
                   // 🌟 The Update Logic: Call the handler with this button's value when clicked
                   onChange={() => handleOverlayChange(overlay)}
                   // Tailwind form styling (requires @tailwindcss/forms plugin)
-                  className="form-radio h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500"
+                  className="sr-only peer"
                 />
-                <span className="ml-2 text-gray-700">{overlay}</span>
+
+                {/* ✅ 2. This 'span' is our NEW VISUAL radio button.
+                    - It's styled as an empty, bordered circle by default.
+                */}
+                <span
+                  className="
+                    h-4 w-4 
+                    rounded-full 
+                    border-2 border-[#25491B]
+                    bg-white
+                    transition-colors 
+                    duration-150
+                    
+                    peer-checked:bg-[#25491B]
+                    peer-checked:border-[#25491B]
+                  "
+                ></span>
+
+                {/* 3. The label text */}
+                <span className="ml-2 text-[#25491B]">{overlay}</span>
               </label>
             ))}
           </div>

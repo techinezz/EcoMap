@@ -1,6 +1,7 @@
 'use client';
 
-import { MapContainer, TileLayer, FeatureGroup } from 'react-leaflet';
+// ✅ 1. Import ZoomControl
+import { MapContainer, TileLayer, FeatureGroup, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
@@ -8,17 +9,10 @@ import { useEffect, useState, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import 'leaflet-draw';
 
-// Fix Leaflet’s default marker icon paths
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
+// ... (Icon fix and DrawControl component remain the same) ...
 
 /**
- * A component that handles the programmatic drawing logic.
+ * A "headless" React component that handles the native Leaflet-Draw logic.
  */
 function DrawControl({
   drawMode,
@@ -29,15 +23,14 @@ function DrawControl({
   onDrawStop: () => void;
   onLayerCreated: (layer: L.Layer) => void;
 }) {
+  // ... (No changes here)
   const map = useMap();
   const drawInstanceRef = useRef<L.Draw.Polygon | null>(null);
-
-  // Effect to handle draw instance (creation/deletion)
   useEffect(() => {
     if (drawMode === 'polygon') {
       drawInstanceRef.current = new L.Draw.Polygon(map, {
         shapeOptions: {
-          color: '#3388ff',
+          color: '#488a36ff',
         },
       });
       drawInstanceRef.current.enable();
@@ -54,151 +47,102 @@ function DrawControl({
       }
     };
   }, [drawMode, map]);
-
-  // Effect to listen for Leaflet-Draw events
   useEffect(() => {
     const handleCreated = (e: L.LeafletEvent) => {
-      // ✅ This is the key change:
-      // We no longer stop drawing. We just add the layer.
       onLayerCreated(e.layer);
     };
-
     const handleDrawStop = () => {
-      // Fired when 'esc' is pressed or drawing is cancelled
       onDrawStop();
     };
-
     map.on(L.Draw.Event.CREATED, handleCreated);
     map.on(L.Draw.Event.DRAWSTOP, handleDrawStop);
-
-    // Cleanup
     return () => {
       map.off(L.Draw.Event.CREATED, handleCreated);
       map.off(L.Draw.Event.DRAWSTOP, handleDrawStop);
     };
   }, [map, onLayerCreated, onDrawStop]);
-
-  return null; // This component doesn't render anything
+  return null;
 }
 
+/**
+ * The main map component that holds the map, UI buttons, and drawing state.
+ */
 export default function EcoMap() {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup>(null);
-
-  // ✅ This button is now a toggle
+  
+  // ... (All your handler functions remain the same) ...
   const handleToggleDrawing = () => {
     setDrawMode((prevMode) => (prevMode === 'polygon' ? null : 'polygon'));
   };
-
   const handleLayerCreated = (layer: L.Layer) => {
     if (featureGroupRef.current) {
       featureGroupRef.current.addLayer(layer);
     }
     console.log('Shape added');
   };
-
   const handleClearLayers = () => {
     if (featureGroupRef.current) {
       featureGroupRef.current.clearLayers();
     }
+    setDrawMode(null);
     console.log('All shapes cleared');
   };
 
-  // ✅ 1. Add the new handler for "Finished Drawing"
-  const handleFinishedDrawing = () => {
-    if (drawMode === 'polygon') {
-      // Exit drawing mode
-      setDrawMode(null);
-    }
-
-    if (!featureGroupRef.current) {
-      return;
-    }
-
-    const layers = featureGroupRef.current.getLayers();
-    if (layers.length === 0) {
-      console.log('No shapes were drawn.');
-      return;
-    }
-
-    // Get GeoJSON for every layer
-    const allGeoJSON = layers.map((layer) => {
-      // We must cast the layer to access the toGeoJSON method
-      return (layer as L.Polygon).toGeoJSON();
-    });
-
-    // Log the data
-    console.log('✅ Finished Drawing! All shapes (GeoJSON):', allGeoJSON);
-    
-    // You can also log just the coordinates
-    const allCoordinates = allGeoJSON.map(geojson => geojson.geometry.coordinates);
-    console.log('Just the coordinates:', JSON.stringify(allCoordinates));
-  };
+  const baseButtonClass =
+    'px-3 py-2 rounded-full border-none cursor-pointer transition-colors shadow-md';
 
   return (
-    <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
-      {/* Button Container */}
+    <div className="relative h-screen w-full">
+      {/* ... (Your buttons div remains the same) ... */}
       <div
-        style={{
-          position: 'absolute',
-          top: '10px',
-          left: '50px',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-        }}
+        className="absolute top-[42px] left-[400px] z-[1000] flex flex-row gap-2 "
       >
-        {/* ✅ 2. Updated Draw Button (Toggle) */}
-        <button
-          onClick={handleToggleDrawing}
-          style={{
-            padding: '8px 12px',
-            cursor: 'pointer',
-            border: 'none',
-            borderRadius: '4px',
-            backgroundColor: drawMode === 'polygon' ? '#ffc107' : 'white',
-          }}
-        >
-          {drawMode === 'polygon' ? 'Stop Drawing' : 'Draw Area'}
-        </button>
-
-        {/* ✅ 3. The new "Finished Drawing" button */}
-        <button
-          onClick={handleFinishedDrawing}
-          style={{
-            padding: '8px 12px',
-            cursor: 'pointer',
-            backgroundColor: '#4CAF50', // Green
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-          }}
-        >
-          Finished Drawing
-        </button>
-
-        {/* Clear Button */}
-        <button
-          onClick={handleClearLayers}
-          style={{
-            padding: '8px 12px',
-            cursor: 'pointer',
-            backgroundColor: '#f44336', // Red
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-          }}
-        >
-          Clear Everything
-        </button>
+        {drawMode === 'polygon' ? (
+          <>
+            <button
+              onClick={handleToggleDrawing}
+              className={`${baseButtonClass} bg-[rgba(171,210,169,0.44)] text-black hover:bg-[rgba(171,210,169,0.44)]  rounded-full h-[2.5vw] w-[2.5vw]`}
+            >
+              <img 
+                src="/pen-tool.svg" 
+                alt="Draw Area" 
+                className="w-7 h-7 " 
+              />
+            </button>
+            <div className='w-[300px] bg-white rounded-full shadow-md'>
+              <button
+                onClick={handleClearLayers}
+                className={`${baseButtonClass} bg-white text-black hover:bg-gray-100 rounded-full h-[2.5vw] w-[2.5vw] shadow-none`}
+              >
+                <img 
+                  src="/eraser.svg" 
+                  alt="Clear All" 
+                  className="w-7 h-7 " 
+                />
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={handleToggleDrawing}
+            className={`${baseButtonClass} bg-white text-black hover:bg-gray-100 rounded-full h-[50] w-[50]`}
+          >
+            <img 
+              src="/pen-tool.svg" 
+              alt="Draw Area" 
+              className="w-7 h-7 " 
+            />
+          </button>
+        )}
       </div>
 
-      {/* The Map */}
+      {/* The Leaflet Map Container */}
       <MapContainer
         center={[40.7128, -74.0060]}
         zoom={13}
-        style={{ height: '100%', width: '100%' }}
+        className="h-full w-full"
+        zoomControl={false} // ✅ 2. Disable the default control
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
@@ -210,6 +154,9 @@ export default function EcoMap() {
           onDrawStop={() => setDrawMode(null)}
           onLayerCreated={handleLayerCreated}
         />
+
+        {/* ✅ 3. Add the new control in the desired position */}
+        <ZoomControl position="bottomright" />
       </MapContainer>
     </div>
   );
