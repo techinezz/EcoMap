@@ -28,7 +28,7 @@ export default function AIChat({ selectedCoordinates }: { selectedCoordinates?: 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputAudioData, setInputAudioData] = useState<Uint8Array>(new Uint8Array(128));
   const [outputAudioData, setOutputAudioData] = useState<Uint8Array>(new Uint8Array(128));
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
 
   // Prepare coordinate context whenever coordinates change
@@ -102,7 +102,9 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
           try {
             // Send context as initial message
-            conversation.sendTextMessage?.(contextToSend);
+            if ('sendUserMessage' in conversation && typeof conversation.sendUserMessage === 'function') {
+              conversation.sendUserMessage(contextToSend);
+            }
             contextSentRef.current = true;
           } catch (error) {
             console.error('Error sending context:', error);
@@ -134,8 +136,9 @@ Please provide a detailed environmental and sustainability analysis for this spe
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
-      setInputAudioData(new Uint8Array(128));
-      setOutputAudioData(new Uint8Array(128));
+      // Only reset if they're not already reset to avoid infinite loop
+      setInputAudioData(prev => prev.some(v => v !== 0) ? new Uint8Array(128) : prev);
+      setOutputAudioData(prev => prev.some(v => v !== 0) ? new Uint8Array(128) : prev);
       return;
     }
 
@@ -187,7 +190,8 @@ Please provide a detailed environmental and sustainability analysis for this spe
         animationFrameRef.current = undefined;
       }
     };
-  }, [isVoiceAgentOpen, conversation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVoiceAgentOpen]);
 
   const handleVoiceAgent = async () => {
     if (conversation.status === 'connected' || conversation.status === 'connecting') {
@@ -393,15 +397,19 @@ Please provide a detailed environmental and sustainability analysis for this spe
       if (conversation.status === 'connected') {
         const coordinateContext = getCoordinateContext();
         try {
-          conversation.setCustomLlmExtraBody?.({
-            context: coordinateContext,
-          });
+          // Check if the method exists before calling
+          if ('setCustomLlmExtraBody' in conversation && typeof (conversation as any).setCustomLlmExtraBody === 'function') {
+            (conversation as any).setCustomLlmExtraBody({
+              context: coordinateContext,
+            });
+          }
         } catch (error) {
           console.error('Error updating context:', error);
         }
       }
     }
-  }, [selectedCoordinates, conversation.status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCoordinates]);
 
   return (
     <div className="flex flex-col h-full bg-white">

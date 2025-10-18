@@ -306,7 +306,9 @@ function ChangeView({ target }: { target: TargetLocation | null }) {
   useEffect(() => {
     if (target && target.bounds) {
         try {
-            const bounds = L.latLngBounds(target.bounds);
+            const bounds = Array.isArray(target.bounds)
+              ? L.latLngBounds(target.bounds as [[number, number], [number, number]])
+              : target.bounds;
             if (bounds.isValid()) {
                 map.flyToBounds(bounds, { padding: [50, 50] });
             }
@@ -749,7 +751,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
         <LocationFinder onLocationFound={setCurrentCenter} />
         <MapClickHandler
             simulationMode={simulationMode}
-            featureGroupRef={featureGroupRef as React.RefObject<L.FeatureGroup<any>> | null}
+            featureGroupRef={featureGroupRef}
             brushSize={brushSize}
             onItemPlaced={handleItemPlaced}
             maxClusters={MAX_CLUSTERS}
