@@ -13,6 +13,8 @@
     "@google/generative-ai": "^0.24.1",
     "@turf/boolean-point-in-polygon": "^7.2.0",
     "@turf/helpers": "^7.2.0",
+    "clsx": "^2.1.1",
+    "cobe": "^0.6.5",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.546.0",
@@ -22,7 +24,8 @@
     "react-leaflet": "^5.0.0",
     "react-leaflet-draw": "^0.21.0",
     "react-leaflet-markercluster": "^5.0.0-rc.0",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
