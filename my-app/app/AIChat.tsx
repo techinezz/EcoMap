@@ -112,7 +112,8 @@ Please provide a detailed environmental and sustainability analysis for this spe
     },
     onDisconnect: () => {
       console.log('Disconnected from ElevenLabs');
-      setIsVoiceAgentOpen(false);
+      // Don't automatically close the voice agent view on disconnect
+      // User can use "Back to Chat" button to return
     },
     onError: (error) => {
       console.error('ElevenLabs error:', error);
@@ -127,25 +128,39 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
   // Update audio visualizer data
   useEffect(() => {
-    if (!isVoiceAgentOpen || conversation.status !== 'connected') {
-      // Reset audio data when not connected
+    if (!isVoiceAgentOpen) {
+      // Reset audio data when voice agent is closed
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
+      setInputAudioData(new Uint8Array(128));
+      setOutputAudioData(new Uint8Array(128));
       return;
     }
 
+    // Always run the animation loop when voice agent is open
     let isActive = true;
 
     const updateAudioData = () => {
-      if (!isActive || conversation.status !== 'connected') {
+      if (!isActive) {
         return;
       }
 
       try {
+        // Try to get audio data
         const inputData = conversation.getInputByteFrequencyData?.();
         const outputData = conversation.getOutputByteFrequencyData?.();
+
+        // Debug log to see if we're getting data
+        if (inputData || outputData) {
+          console.log('Audio data received:', {
+            inputLength: inputData?.length,
+            outputLength: outputData?.length,
+            inputSample: inputData ? Array.from(inputData.slice(0, 5)) : null,
+            outputSample: outputData ? Array.from(outputData.slice(0, 5)) : null,
+          });
+        }
 
         if (inputData && inputData.length > 0) {
           setInputAudioData(inputData);
@@ -154,7 +169,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
           setOutputAudioData(outputData);
         }
       } catch (error) {
-        // Silently ignore errors during audio data retrieval
+        console.error('Error getting audio data:', error);
       }
 
       if (isActive) {
@@ -162,22 +177,17 @@ Please provide a detailed environmental and sustainability analysis for this spe
       }
     };
 
-    // Small delay to let audio streams initialize
-    const timeoutId = setTimeout(() => {
-      if (isActive) {
-        updateAudioData();
-      }
-    }, 100);
+    // Start the animation loop immediately
+    updateAudioData();
 
     return () => {
       isActive = false;
-      clearTimeout(timeoutId);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
     };
-  }, [isVoiceAgentOpen, conversation.status]);
+  }, [isVoiceAgentOpen, conversation]);
 
   const handleVoiceAgent = async () => {
     if (conversation.status === 'connected' || conversation.status === 'connecting') {
@@ -228,6 +238,14 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
   const handleEndVoiceAgent = async () => {
     await conversation.endSession();
+    // Don't close the voice agent view, just disconnect
+  };
+
+  const handleBackToChat = () => {
+    // If still connected, disconnect first
+    if (conversation.status === 'connected') {
+      conversation.endSession();
+    }
     setIsVoiceAgentOpen(false);
   };
 
@@ -386,19 +404,104 @@ Please provide a detailed environmental and sustainability analysis for this spe
   }, [selectedCoordinates, conversation.status]);
 
   return (
-    <div className="flex flex-col h-full p-4 bg-white">
-      {/* Header */}
-      <div className="flex items-center justify-end mb-4 pb-3  ">
-        <button
-          onClick={() => setMessages([messages[0]])}
-          className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-        >
-          Clear
-        </button>
-      </div>
+    <div className="flex flex-col h-full bg-white">
+      {/* Voice Agent Mode - Full Screen */}
+      {isVoiceAgentOpen ? (
+        <div className="flex flex-col h-full p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-semibold text-gray-900">Voice Assistant</h2>
+            <button
+              onClick={handleBackToChat}
+              className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Back to Chat
+            </button>
+          </div>
 
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto mb-4 space-y-4">
+          {/* Location Context */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-700 line-clamp-3">
+              {selectedCoordinates && selectedCoordinates.length > 0
+                ? 'Voice assistant has context about your selected map area'
+                : 'Draw an area on the map to provide location context'}
+            </p>
+          </div>
+
+          {/* Status Indicator */}
+          <div className="mb-6 text-center">
+            <span className={`inline-block px-4 py-2 rounded-full text-sm font-medium ${
+              conversation.status === 'connected' ? 'bg-green-100 text-green-800' :
+              conversation.status === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {conversation.status === 'connected' ? '● Connected' :
+               conversation.status === 'connecting' ? '● Connecting...' :
+               '○ Disconnected'}
+            </span>
+          </div>
+
+          {/* Audio Visualizers - Centered and Larger */}
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex gap-12">
+              <div className="text-center">
+                <CircularAudioVisualizer
+                  audioData={inputAudioData}
+                  size={180}
+                  barCount={64}
+                  barColor="#ABD2A9"
+                />
+                <p className="text-sm text-gray-600 mt-4 font-medium">Your Voice</p>
+              </div>
+              <div className="text-center">
+                <CircularAudioVisualizer
+                  audioData={outputAudioData}
+                  size={180}
+                  barCount={64}
+                  barColor="#9BC299"
+                />
+                <p className="text-sm text-gray-600 mt-4 font-medium">AI Voice</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="mt-6 flex gap-3">
+            {conversation.status === 'connected' ? (
+              <button
+                onClick={handleEndVoiceAgent}
+                className="flex-1 px-6 py-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2 font-medium"
+              >
+                <PhoneOff size={24} />
+                End Call
+              </button>
+            ) : (
+              <button
+                onClick={handleVoiceAgent}
+                className="flex-1 px-6 py-4 bg-[#25491B] text-white rounded-lg hover:bg-[#1a3513] transition-colors flex items-center justify-center gap-2 font-medium"
+                disabled={conversation.status === 'connecting'}
+              >
+                <Phone size={24} />
+                {conversation.status === 'connecting' ? 'Connecting...' : 'Start Call'}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Text Chat Mode - Full Screen */
+        <div className="flex flex-col h-full p-4">
+          {/* Header */}
+          <div className="flex items-center justify-end mb-4 pb-3">
+            <button
+              onClick={() => setMessages([messages[0]])}
+              className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Messages Container */}
+          <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -485,80 +588,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
         >
           Send
         </button>
-      </form>
-
-      {/* ElevenLabs Voice Agent Modal */}
-      {isVoiceAgentOpen && (
-        <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center" onClick={handleEndVoiceAgent}>
-          <div className="bg-white rounded-lg p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold">Voice Assistant</h3>
-              <p className="text-xs text-gray-600 mt-2">{getCoordinateContext()}</p>
-            </div>
-
-            {/* Status indicator */}
-            <div className="mb-4 text-center">
-              <span className={`inline-block px-3 py-1 rounded-full text-sm ${
-                conversation.status === 'connected' ? 'bg-green-100 text-green-800' :
-                conversation.status === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {conversation.status === 'connected' ? 'Connected' :
-                 conversation.status === 'connecting' ? 'Connecting...' :
-                 'Disconnected'}
-              </span>
-            </div>
-
-            {/* Audio Visualizers */}
-            <div className="flex justify-center items-center gap-8 mb-6">
-              <div className="text-center">
-                <CircularAudioVisualizer
-                  audioData={inputAudioData}
-                  size={120}
-                  barCount={64}
-                  barColor="#ABD2A9"
-                />
-                <p className="text-xs text-gray-600 mt-2">Your Voice</p>
-              </div>
-              <div className="text-center">
-                <CircularAudioVisualizer
-                  audioData={outputAudioData}
-                  size={120}
-                  barCount={64}
-                  barColor="#9BC299"
-                />
-                <p className="text-xs text-gray-600 mt-2">AI Voice</p>
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div className="flex gap-2">
-              {conversation.status === 'connected' ? (
-                <button
-                  onClick={handleEndVoiceAgent}
-                  className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
-                >
-                  <PhoneOff size={20} />
-                  End Call
-                </button>
-              ) : (
-                <button
-                  onClick={handleVoiceAgent}
-                  className="flex-1 px-4 py-3 bg-[#ABD2A9] text-white rounded-lg hover:bg-[#9BC299] transition-colors flex items-center justify-center gap-2"
-                  disabled={conversation.status === 'connecting'}
-                >
-                  <Phone size={20} />
-                  {conversation.status === 'connecting' ? 'Connecting...' : 'Start Call'}
-                </button>
-              )}
-              <button
-                onClick={handleEndVoiceAgent}
-                className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
+        </form>
         </div>
       )}
     </div>
