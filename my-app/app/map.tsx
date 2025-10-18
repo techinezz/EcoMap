@@ -369,7 +369,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
 
   // --- Map locations and zooms ---
   const newYorkCenter: LatLngTuple = [40.7128, -74.006];
-  const defaultZoom = 13;
+  const defaultZoom = 19;
   const treeLossZoom = 11;
   const globalMaxZoom = 19; // Keep this as the overall max zoom limit
   const [currentCenter, setCurrentCenter] = useState<LatLngTuple>(newYorkCenter);
