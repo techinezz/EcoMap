@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { Mic } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -20,7 +21,30 @@ export default function AIChat() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isVoiceAgentOpen, setIsVoiceAgentOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load ElevenLabs script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@elevenlabs/convai-widget-embed';
+    script.async = true;
+    script.type = 'text/javascript';
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const handleVoiceAgent = () => {
+    setIsVoiceAgentOpen(true);
+    // Trigger the ElevenLabs widget
+    const widget = document.querySelector('elevenlabs-convai') as any;
+    if (widget) {
+      widget.style.display = 'block';
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -154,6 +178,14 @@ export default function AIChat() {
           className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ABD2A9] bg-white text-gray-900 disabled:opacity-50"
         />
         <button
+          type="button"
+          onClick={handleVoiceAgent}
+          className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+          title="Voice Chat"
+        >
+          <Mic size={20} />
+        </button>
+        <button
           type="submit"
           disabled={isLoading || !input.trim()}
           className="px-6 py-3 bg-[#ABD2A9] text-white rounded-lg hover:bg-[#9BC299] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
@@ -161,6 +193,9 @@ export default function AIChat() {
           Send
         </button>
       </form>
+
+      {/* ElevenLabs Voice Agent */}
+      <elevenlabs-convai agent-id="agent_6201k7tp1f7pf9k9pabat6w6036w"></elevenlabs-convai>
     </div>
   );
 }
