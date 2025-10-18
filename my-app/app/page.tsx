@@ -24,7 +24,7 @@ export default function Home() {
       {/* Chat Toggle Button */}
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
-        className="fixed top-10 right-10 z-[1000] p-3 rounded-full bg-[#25491B] text-white hover:bg-[#25491B] shadow-lg transition-colors"
+        className="fixed top-10 right-10 z-[1000] p-3 rounded-full bg-[#25491B] text-white hover:bg-[#25491B] shadow-lg transition-colors cursor-pointer"
       >
 {isChatOpen ? (
           <img src="/close.svg" alt="Close chat" className="w-6 h-6" />
