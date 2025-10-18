@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Mic } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
