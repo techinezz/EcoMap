@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
@@ -9,7 +10,7 @@ interface Message {
   timestamp: Date;
 }
 
-export default function AIChat() {
+export default function AIChat({ selectedCoordinates }: { selectedCoordinates?: any[] }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -29,6 +30,65 @@ export default function AIChat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleAutoAnalysis = async (message: string) => {
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: 'Coordinates have been sent!',
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: message,
+          coordinates: selectedCoordinates,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.text,
+        timestamp: new Date(),
+      };
+
+      // Add suggested questions after initial analysis
+      const suggestionMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: 'assistant',
+        content: `**You might also want to ask:**\n\n1. Can you go in-depth with one of the key issues?\n2. How much would these solutions cost?\n3. What can local residents do to help?\n4. Compare this area to nearby neighborhoods`,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, aiMessage, suggestionMessage]);
+    } catch (error) {
+      console.error('Error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,13 +112,9 @@ export default function AIChat() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           prompt: userMessage.content,
-          // Optional: send conversation history for context
-          history: messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
+          coordinates: selectedCoordinates,
         }),
       });
 
@@ -67,14 +123,15 @@ export default function AIChat() {
       }
 
       const data = await response.json();
-      
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: data.text,
         timestamp: new Date(),
       };
-      
+
+      // Don't add suggestions for user questions, only for initial analysis
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
       console.error('Error:', error);
@@ -90,11 +147,25 @@ export default function AIChat() {
     }
   };
 
+  // When coordinates are received, automatically send them to AI
+  const prevCoordinatesRef = useRef<any[]>([]);
+
+  useEffect(() => {
+    // Only trigger if coordinates actually changed (not empty and different from previous)
+    if (selectedCoordinates &&
+        selectedCoordinates.length > 0 &&
+        JSON.stringify(selectedCoordinates) !== JSON.stringify(prevCoordinatesRef.current)) {
+
+      prevCoordinatesRef.current = selectedCoordinates;
+      const autoMessage = 'Analyze the area I just selected on the map.';
+      handleAutoAnalysis(autoMessage);
+    }
+  }, [selectedCoordinates]);
+
   return (
     <div className="flex flex-col h-full p-4 bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-gray-900">AI Chat Bot</h1>
+      <div className="flex items-center justify-end mb-4 pb-3 border-b border-gray-200">
         <button
           onClick={() => setMessages([messages[0]])}
           className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
@@ -113,14 +184,37 @@ export default function AIChat() {
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-lg px-4 py-2 ${
+              className={`max-w-[80%] rounded-lg px-4 py-3 ${
                 message.role === 'user'
                   ? 'bg-[#ABD2A9] text-gray-900'
                   : 'bg-gray-100 text-gray-900'
               }`}
             >
-              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-              <span className="text-xs opacity-70 mt-1 block">
+              <div className="text-sm prose prose-sm max-w-none
+                prose-headings:font-bold prose-headings:text-gray-900 prose-headings:mb-2 prose-headings:mt-3 first:prose-headings:mt-0
+                prose-p:text-gray-900 prose-p:my-2 prose-p:leading-relaxed
+                prose-strong:text-gray-900 prose-strong:font-semibold
+                prose-ul:my-2 prose-ul:space-y-1
+                prose-li:text-gray-900 prose-li:my-1
+                prose-h1:text-base prose-h2:text-base prose-h3:text-sm
+                [&>*:first-child]:mt-0 [&>*:last-child]:mb-0
+              ">
+                <ReactMarkdown
+                  components={{
+                    h1: ({node, ...props}) => <h1 className="text-base font-bold mt-3 mb-2 first:mt-0" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-base font-bold mt-3 mb-2 first:mt-0" {...props} />,
+                    h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-3 mb-2 first:mt-0" {...props} />,
+                    p: ({node, ...props}) => <p className="my-2 leading-relaxed" {...props} />,
+                    ul: ({node, ...props}) => <ul className="my-2 ml-4 space-y-1 list-disc" {...props} />,
+                    ol: ({node, ...props}) => <ol className="my-2 ml-4 space-y-1 list-decimal" {...props} />,
+                    li: ({node, ...props}) => <li className="my-1 leading-relaxed" {...props} />,
+                    strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
+                  }}
+                >
+                  {message.content}
+                </ReactMarkdown>
+              </div>
+              <span className="text-xs opacity-70 mt-2 block">
                 {message.timestamp.toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',

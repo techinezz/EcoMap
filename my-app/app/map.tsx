@@ -35,7 +35,7 @@ function DrawControl({
   // Effect to handle draw instance (creation/deletion)
   useEffect(() => {
     if (drawMode === 'polygon') {
-      drawInstanceRef.current = new L.Draw.Polygon(map, {
+      drawInstanceRef.current = new L.Draw.Polygon(map as any, {
         shapeOptions: {
           color: '#3388ff',
         },
@@ -81,7 +81,7 @@ function DrawControl({
   return null; // This component doesn't render anything
 }
 
-export default function EcoMap() {
+export default function EcoMap({ onCoordinatesFinished }: { onCoordinatesFinished?: (coordinates: any[]) => void }) {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup>(null);
 
@@ -95,6 +95,17 @@ export default function EcoMap() {
       featureGroupRef.current.addLayer(layer);
     }
     console.log('Shape added');
+
+    // Automatically send coordinates when shape is completed
+    if (featureGroupRef.current) {
+      const layers = featureGroupRef.current.getLayers();
+      const allGeoJSON = layers.map((l) => (l as L.Polygon).toGeoJSON());
+      const allCoordinates = allGeoJSON.map(geojson => geojson.geometry.coordinates);
+
+      if (onCoordinatesFinished && allCoordinates.length > 0) {
+        onCoordinatesFinished(allCoordinates);
+      }
+    }
   };
 
   const handleClearLayers = () => {
@@ -129,10 +140,15 @@ export default function EcoMap() {
 
     // Log the data
     console.log('✅ Finished Drawing! All shapes (GeoJSON):', allGeoJSON);
-    
+
     // You can also log just the coordinates
     const allCoordinates = allGeoJSON.map(geojson => geojson.geometry.coordinates);
     console.log('Just the coordinates:', JSON.stringify(allCoordinates));
+
+    // Send coordinates to parent component (which will pass to AI)
+    if (onCoordinatesFinished) {
+      onCoordinatesFinished(allCoordinates);
+    }
   };
 
   return (
