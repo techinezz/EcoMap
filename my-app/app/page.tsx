@@ -50,7 +50,7 @@ export default function Home() {
 
       {/* Chat Overlay */}
       {isChatOpen && (
-        <div className="fixed top-25 right-9 bottom-4 left-[40%] z-[1000] bg-white rounded-lg shadow-2xl overflow-hidden">
+        <div className="fixed top-25 right-9 bottom-4 left-[70%] z-[1000] bg-white rounded-lg shadow-2xl overflow-hidden">
           <AIChat selectedCoordinates={mapCoordinates} />
         </div>
       )}
