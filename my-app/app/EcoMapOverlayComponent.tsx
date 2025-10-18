@@ -3,28 +3,25 @@
 // Hamburger Icon for Menu
 // Section with radio buttons
 "use client";
-import React, { useState } from "react";
+import React, { useState, FC } from "react";
 
-export default function EcoMapOverlayComponent() {
-  // State for managing open/closed menu
-  type Overlay = "None" | "Air Quality" | "Carbon Footprint";
-  const OVERLAYS: Overlay[] = ["None", "Air Quality", "Carbon Footprint"];
+type Overlay = "None" | "Air Quality" | "Carbon Footprint";
+const OVERLAYS: Overlay[] = ["None", "Air Quality", "Carbon Footprint"];
 
+interface EcoMapOverlayProps {
+  selectedOverlay: Overlay; // State received from parent
+  onOverlayChange: (overlay: Overlay) => void; // Handler received from parent
+}
+
+const EcoMapOverlayComponent: FC<EcoMapOverlayProps> = ({
+  selectedOverlay,
+  onOverlayChange,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Functions to toggle the state
   const toggleMenu = () => {
     setIsOpen(!isOpen);
-  };
-
-  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
-
-  const handleOverlayChange = (overlay: Overlay) => {
-    // This function updates the state with the value of the button that was clicked
-    setSelectedOverlay(overlay);
-
-    // NOTE: You might add logic here later, like:
-    // if (overlay === "Air Quality") { // show air quality data on the map }
   };
 
   return (
@@ -48,7 +45,7 @@ export default function EcoMapOverlayComponent() {
         </div>
 
         <button className="text-2xl text-green-700" onClick={toggleMenu}>
-          {isOpen ? "x" : "☰"}
+          {isOpen ? "✕" : "☰"}
         </button>
       </div>
 
@@ -67,10 +64,8 @@ export default function EcoMapOverlayComponent() {
                   type="radio"
                   name="overlay-selection" // Groups all buttons so only one can be selected
                   value={overlay}
-                  // 🌟 The Selection Logic: Is the current overlay the one stored in state?
                   checked={selectedOverlay === overlay}
-                  // 🌟 The Update Logic: Call the handler with this button's value when clicked
-                  onChange={() => handleOverlayChange(overlay)}
+                  onChange={() => onOverlayChange(overlay)}
                   // Tailwind form styling (requires @tailwindcss/forms plugin)
                   className="form-radio h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500"
                 />
@@ -82,4 +77,6 @@ export default function EcoMapOverlayComponent() {
       )}
     </div>
   );
-}
+};
+
+export default EcoMapOverlayComponent;

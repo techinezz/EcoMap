@@ -1,20 +1,26 @@
-'use client';
+"use client";
 
-import { MapContainer, TileLayer, FeatureGroup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet-draw/dist/leaflet.draw.css';
-import { useEffect, useState, useRef } from 'react';
-import { useMap } from 'react-leaflet';
-import 'leaflet-draw';
+import { MapContainer, TileLayer, FeatureGroup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet-draw/dist/leaflet.draw.css";
+import { useEffect, useState, useRef, FC } from "react";
+import { useMap } from "react-leaflet";
+import "leaflet-draw";
+
+// Props interface for heatmap
+interface EcoMapProps {
+  // Define the prop the component expects
+  selectedOverlay: "None" | "Air Quality" | "Carbon Footprint";
+}
 
 // Fix Leaflet’s default marker icon paths
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
-    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
 /**
@@ -34,10 +40,10 @@ function DrawControl({
 
   // Effect to handle draw instance (creation/deletion)
   useEffect(() => {
-    if (drawMode === 'polygon') {
+    if (drawMode === "polygon") {
       drawInstanceRef.current = new L.Draw.Polygon(map, {
         shapeOptions: {
-          color: '#3388ff',
+          color: "#3388ff",
         },
       });
       drawInstanceRef.current.enable();
@@ -81,32 +87,32 @@ function DrawControl({
   return null; // This component doesn't render anything
 }
 
-export default function EcoMap() {
+const EcoMap: FC<EcoMapProps> = ({ selectedOverlay }) => {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup>(null);
 
   // ✅ This button is now a toggle
   const handleToggleDrawing = () => {
-    setDrawMode((prevMode) => (prevMode === 'polygon' ? null : 'polygon'));
+    setDrawMode((prevMode) => (prevMode === "polygon" ? null : "polygon"));
   };
 
   const handleLayerCreated = (layer: L.Layer) => {
     if (featureGroupRef.current) {
       featureGroupRef.current.addLayer(layer);
     }
-    console.log('Shape added');
+    console.log("Shape added");
   };
 
   const handleClearLayers = () => {
     if (featureGroupRef.current) {
       featureGroupRef.current.clearLayers();
     }
-    console.log('All shapes cleared');
+    console.log("All shapes cleared");
   };
 
   // ✅ 1. Add the new handler for "Finished Drawing"
   const handleFinishedDrawing = () => {
-    if (drawMode === 'polygon') {
+    if (drawMode === "polygon") {
       // Exit drawing mode
       setDrawMode(null);
     }
@@ -117,7 +123,7 @@ export default function EcoMap() {
 
     const layers = featureGroupRef.current.getLayers();
     if (layers.length === 0) {
-      console.log('No shapes were drawn.');
+      console.log("No shapes were drawn.");
       return;
     }
 
@@ -128,51 +134,53 @@ export default function EcoMap() {
     });
 
     // Log the data
-    console.log('✅ Finished Drawing! All shapes (GeoJSON):', allGeoJSON);
-    
+    console.log("✅ Finished Drawing! All shapes (GeoJSON):", allGeoJSON);
+
     // You can also log just the coordinates
-    const allCoordinates = allGeoJSON.map(geojson => geojson.geometry.coordinates);
-    console.log('Just the coordinates:', JSON.stringify(allCoordinates));
+    const allCoordinates = allGeoJSON.map(
+      (geojson) => geojson.geometry.coordinates
+    );
+    console.log("Just the coordinates:", JSON.stringify(allCoordinates));
   };
 
   return (
-    <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
+    <div style={{ position: "relative", height: "100vh", width: "100%" }}>
       {/* Button Container */}
       <div
         style={{
-          position: 'absolute',
-          top: '10px',
-          left: '50px',
+          position: "absolute",
+          top: "10px",
+          left: "50px",
           zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
         }}
       >
         {/* ✅ 2. Updated Draw Button (Toggle) */}
         <button
           onClick={handleToggleDrawing}
           style={{
-            padding: '8px 12px',
-            cursor: 'pointer',
-            border: 'none',
-            borderRadius: '4px',
-            backgroundColor: drawMode === 'polygon' ? '#ffc107' : 'white',
+            padding: "8px 12px",
+            cursor: "pointer",
+            border: "none",
+            borderRadius: "4px",
+            backgroundColor: drawMode === "polygon" ? "#ffc107" : "white",
           }}
         >
-          {drawMode === 'polygon' ? 'Stop Drawing' : 'Draw Area'}
+          {drawMode === "polygon" ? "Stop Drawing" : "Draw Area"}
         </button>
 
         {/* ✅ 3. The new "Finished Drawing" button */}
         <button
           onClick={handleFinishedDrawing}
           style={{
-            padding: '8px 12px',
-            cursor: 'pointer',
-            backgroundColor: '#4CAF50', // Green
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
+            padding: "8px 12px",
+            cursor: "pointer",
+            backgroundColor: "#4CAF50", // Green
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
           }}
         >
           Finished Drawing
@@ -182,12 +190,12 @@ export default function EcoMap() {
         <button
           onClick={handleClearLayers}
           style={{
-            padding: '8px 12px',
-            cursor: 'pointer',
-            backgroundColor: '#f44336', // Red
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
+            padding: "8px 12px",
+            cursor: "pointer",
+            backgroundColor: "#f44336", // Red
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
           }}
         >
           Clear Everything
@@ -196,9 +204,9 @@ export default function EcoMap() {
 
       {/* The Map */}
       <MapContainer
-        center={[40.7128, -74.0060]}
+        center={[40.7128, -74.006]}
         zoom={13}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
@@ -212,5 +220,9 @@ export default function EcoMap() {
         />
       </MapContainer>
     </div>
+
+    // here
   );
-}
+};
+
+export default EcoMap;

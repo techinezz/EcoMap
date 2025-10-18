@@ -6,13 +6,21 @@ import dynamic from "next/dynamic";
 import EcoMap from "./map";
 import EcoMapOverlayComponent from "./EcoMapOverlayComponent";
 
+type Overlay = "None" | "Air Quality" | "Carbon Footprint";
+
 export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
+
+  const handleOverlayChange = (overlay: Overlay) => {
+    setSelectedOverlay(overlay);
+  };
+
   return (
     <div className="h-screen w-screen relative">
-      <EcoMap />
-      
+      <EcoMap selectedOverlay={selectedOverlay} />
+
       {/* Chat Toggle Button */}
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
@@ -28,7 +36,10 @@ export default function Home() {
         </div>
       )}
       <div className="absolute top-4 left-4 z-99999">
-        <EcoMapOverlayComponent />
+        <EcoMapOverlayComponent
+          selectedOverlay={selectedOverlay}
+          onOverlayChange={handleOverlayChange}
+        />
       </div>
     </div>
   );
