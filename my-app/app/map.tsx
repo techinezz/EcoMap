@@ -15,6 +15,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
 import { useEffect, useState, useRef, useCallback, FC } from "react";
 import "leaflet-draw";
+import EcoMapOverlayComponent from "./EcoMapOverlayComponent";
 
 export interface TargetLocation {
   bounds: L.LatLngBoundsExpression;
@@ -579,7 +580,12 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     "https://storage.googleapis.com/earthenginepartners-hansen/tiles/gfc_v1.8/loss_year/{z}/{x}/{y}.png";
 
   return (
+    
     <div className="relative h-screen w-full">
+            <div className="absolute top-4 left-4 z-1002">
+        {/* --- 3. PASS THE 'onLocationSelect' PROP HERE --- */}
+        <EcoMapOverlayComponent onLocationSelect={handleRecenter} />
+      </div>
       {/* Button container */}
       <div className="absolute top-[36px] left-[880px] z-[1000] flex flex-col items-end gap-2">
         {/* Top row of buttons */}

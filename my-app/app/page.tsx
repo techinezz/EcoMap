@@ -1,7 +1,19 @@
+"use client";
+import { Bot } from "lucide-react";
+import AIChat from "./AIChat";
+import { useState } from "react";
+import dynamic from "next/dynamic";
+import EcoMapOverlayComponent, {
+  TargetLocation,
+} from "./EcoMapOverlayComponent";
 import LandingPage from "./landing-page";
 
+const EcoMap = dynamic(() => import("./map"), {
+  ssr: false, // This is the most important part
+  loading: () => <p>Loading map...</p>, // Optional: Show a message while it loads
+});
+
 export default function Home() {
-  <LandingPage/>
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [mapCoordinates, setMapCoordinates] = useState<any[]>([]);
 
@@ -18,6 +30,7 @@ export default function Home() {
 
   return (
     <div className="relative h-screen w-screen">
+        <LandingPage/>
       {/* Map */}
       {/* --- 2. PASS THE 'targetLocation' PROP HERE --- */}
       <EcoMap
@@ -44,10 +57,6 @@ export default function Home() {
         </div>
       )}
 
-      <div className="absolute top-4 left-4 z-99999">
-        {/* --- 3. PASS THE 'onLocationSelect' PROP HERE --- */}
-        <EcoMapOverlayComponent onLocationSelect={setTargetLocation} />
-      </div>
     </div>
   );
 }
