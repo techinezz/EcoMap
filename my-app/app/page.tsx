@@ -17,16 +17,10 @@ export default function Home() {
   };
 
   return (
-<<<<<<< HEAD
     <div className="relative h-screen w-screen">
       {/* Map */}
       <EcoMap onCoordinatesFinished={handleCoordinatesUpdate} />
 
-=======
-    <div className="h-screen w-screen relative">
-      <EcoMap />
-      
->>>>>>> 613aabbe3eb18dabb124048d5e80ced3d8ffc71b
       {/* Chat Toggle Button */}
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
@@ -41,6 +35,7 @@ export default function Home() {
           <AIChat selectedCoordinates={mapCoordinates} />
         </div>
       )}
+      
       <div className="absolute top-4 left-4 z-99999">
         <EcoMapOverlayComponent />
       </div>
