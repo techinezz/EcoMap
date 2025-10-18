@@ -4,6 +4,7 @@ import AIChat from "./AIChat";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 
+// Dynamically import map components to avoid SSR issues with Leaflet
 const EcoMap = dynamic(() => import("./map"), { ssr: false });
 const EcoMapOverlayComponent = dynamic(() => import("./EcoMapOverlayComponent"), { ssr: false });
 
@@ -25,14 +26,18 @@ export default function Home() {
       {/* Chat Toggle Button */}
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
-        className="fixed top-4 right-4 z-[1000] p-3 rounded-full bg-[#ABD2A9] text-white hover:bg-[#9BC299] shadow-lg transition-colors"
+        className="fixed top-10 right-10 z-[1000] p-3 rounded-full bg-[#25491B] text-white hover:bg-[#25491B] shadow-lg transition-colors"
       >
-        <Bot size={24} />
+{isChatOpen ? (
+          <img src="/close.svg" alt="Close chat" className="w-6 h-6" />
+        ) : (
+          <Bot size={24} />
+        )}
       </button>
 
       {/* Chat Overlay */}
       {isChatOpen && (
-        <div className="fixed top-16 right-4 bottom-4 left-[40%] z-[1000] bg-white rounded-lg shadow-2xl overflow-hidden">
+        <div className="fixed top-25 right-9 bottom-4 left-[40%] z-[1000] bg-white rounded-lg shadow-2xl overflow-hidden">
           <AIChat selectedCoordinates={mapCoordinates} />
         </div>
       )}
