@@ -189,7 +189,7 @@ export default function AIChat({ selectedCoordinates }: { selectedCoordinates?: 
   return (
     <div className="flex flex-col h-full p-4 bg-white">
       {/* Header */}
-      <div className="flex items-center justify-end mb-4 pb-3 border-b border-gray-200">
+      <div className="flex items-center justify-end mb-4 pb-3  ">
         <button
           onClick={() => setMessages([messages[0]])}
           className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"

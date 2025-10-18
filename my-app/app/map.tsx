@@ -10,6 +10,14 @@ import { useMap } from 'react-leaflet';
 import 'leaflet-draw';
 
 // ... (Icon fix and DrawControl component remain the same) ...
+// Fix Leaflet’s default marker icon paths which can break in Next.js/Webpack
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 /**
  * A "headless" React component that handles the native Leaflet-Draw logic.
@@ -63,15 +71,17 @@ function DrawControl({
   }, [map, onLayerCreated, onDrawStop]);
   return null;
 }
-
+type Overlay = "None" | "Air Quality" | "Carbon Footprint";
+const OVERLAYS: Overlay[] = ["None", "Air Quality", "Carbon Footprint"];
 export default function EcoMap({ onCoordinatesFinished }: { onCoordinatesFinished?: (coordinates: any[]) => void }) {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup>(null);
-  
-  // ... (All your handler functions remain the same) ...
+  const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
+  const [selectedOverlay, setSelectedOverlay] = useState<Overlay>("None");
   const handleToggleDrawing = () => {
     setDrawMode((prevMode) => (prevMode === 'polygon' ? null : 'polygon'));
   };
+  
   const handleLayerCreated = (layer: L.Layer) => {
     if (featureGroupRef.current) {
       featureGroupRef.current.addLayer(layer);
@@ -89,6 +99,7 @@ export default function EcoMap({ onCoordinatesFinished }: { onCoordinatesFinishe
       }
     }
   };
+  
   const handleClearLayers = () => {
     if (featureGroupRef.current) {
       featureGroupRef.current.clearLayers();
@@ -96,82 +107,118 @@ export default function EcoMap({ onCoordinatesFinished }: { onCoordinatesFinishe
     setDrawMode(null);
     console.log('All shapes cleared');
   };
-
-  const baseButtonClass =
-    'px-3 py-2 rounded-full border-none cursor-pointer transition-colors shadow-md';
-  // ✅ 1. Add the new handler for "Finished Drawing"
-
-    if (!featureGroupRef.current) {
-      return;
-    }
-
-    const layers = featureGroupRef.current.getLayers();
-    if (layers.length === 0) {
-      console.log('No shapes were drawn.');
-      return;
-    }
-
-    // Get GeoJSON for every layer
-    const allGeoJSON = layers.map((layer) => {
-      // We must cast the layer to access the toGeoJSON method
-      return (layer as L.Polygon).toGeoJSON();
-    });
-
-    // Log the data
-    console.log('✅ Finished Drawing! All shapes (GeoJSON):', allGeoJSON);
-
-    // You can also log just the coordinates
-    const allCoordinates = allGeoJSON.map(geojson => geojson.geometry.coordinates);
-    console.log('Just the coordinates:', JSON.stringify(allCoordinates));
-
-    // Send coordinates to parent component (which will pass to AI)
-    if (onCoordinatesFinished) {
-      onCoordinatesFinished(allCoordinates);
-    }
+const toggleOverlayMenu = () => {
+    setIsOverlayMenuOpen(!isOverlayMenuOpen);
   };
+
+  const handleOverlayChange = (overlay: Overlay) => {
+    setSelectedOverlay(overlay);
+    console.log("Selected overlay:", overlay);
+    // Add logic here to show/hide the actual map layers
+    // e.g., if (overlay === 'Air Quality') { ... }
+
+    // You can choose to close the menu on selection if you want:
+    // setIsOverlayMenuOpen(false);
+  };
+  // Standardized button class: 48px, rounded, flex-centered
+  const baseButtonClass =
+    'rounded-full border-none cursor-pointer transition-colors flex items-center justify-center h-12 w-12';
 
   return (
     <div className="relative h-screen w-full">
-      {/* ... (Your buttons div remains the same) ... */}
+      
+      {/* Button container */}
       <div
-        className="absolute top-[42px] left-[400px] z-[1000] flex flex-row gap-2 "
+        className="absolute top-[42px] left-[880px] z-[1000]"
       >
-        {drawMode === 'polygon' ? (
-          <>
-            <button
-              onClick={handleToggleDrawing}
-              className={`${baseButtonClass} bg-[rgba(171,210,169,0.44)] text-black hover:bg-[rgba(171,210,169,0.44)]  rounded-full h-[2.5vw] w-[2.5vw]`}
-            >
-              <img 
-                src="/pen-tool.svg" 
-                alt="Draw Area" 
-                className="w-7 h-7 " 
-              />
-            </button>
-            <div className='w-[300px] bg-white rounded-full shadow-md'>
-              <button
-                onClick={handleClearLayers}
-                className={`${baseButtonClass} bg-white text-black hover:bg-gray-100 rounded-full h-[2.5vw] w-[2.5vw] shadow-none`}
-              >
-                <img 
-                  src="/eraser.svg" 
-                  alt="Clear All" 
-                  className="w-7 h-7 " 
-                />
-              </button>
-            </div>
-          </>
-        ) : (
+        {/* This is the single white pill container */}
+        <div className='bg-white rounded-full shadow-md flex flex-row items-center p-1.5 gap-1.5'>
+          
+          {/* 1. Pen Button (always visible, color changes) */}
           <button
             onClick={handleToggleDrawing}
-            className={`${baseButtonClass} bg-white text-black hover:bg-gray-100 rounded-full h-[50] w-[50]`}
+            className={`${baseButtonClass}  ${
+              drawMode === 'polygon' 
+                ? 'bg-[rgba(171,210,169,0.44)] hover:bg-[rgba(171,210,169,0.6)]' 
+                : 'bg-white hover:bg-gray-100'
+            }`}
           >
             <img 
               src="/pen-tool.svg" 
               alt="Draw Area" 
-              className="w-7 h-7 " 
+              className="w-7 h-7" 
             />
           </button>
+          
+          {/* ✅ 2. Eraser Button (NOW ALWAYS VISIBLE)
+            Removed the {drawMode === 'polygon' && ...} wrapper
+          */}
+          <button
+            onClick={handleClearLayers}
+            className={`${baseButtonClass} bg-white text-black hover:bg-gray-100`}
+          >
+            <img 
+              src="/eraser.svg" 
+              alt="Clear All" 
+              className="w-7 h-7" 
+            />
+          </button>
+{/* 3. Map/Overlay Button - ✅ Added onClick */}
+          <button
+            onClick={toggleOverlayMenu}
+className={`${baseButtonClass} ${
+              isOverlayMenuOpen // Check if the overlay menu is open
+                ? 'bg-[rgba(171,210,169,0.44)] hover:bg-[rgba(171,210,169,0.6)]' // Apply green highlight
+                : 'bg-white hover:bg-gray-100' // Default white
+            }`}
+          >
+            <img 
+              src="/map.svg" 
+              alt="Overlay" 
+              className="w-7 h-7" 
+            />
+          </button>
+        </div>
+
+        {/* ✅ 4. NEW: Overlay Dropdown Menu */}
+        {isOverlayMenuOpen && (
+          <div className="absolute top-full mt-2 w-56 bg-white rounded-xl shadow-lg p-4 z-[1001]">
+            <h3 className="text-sm font-semibold text-[#25491B] mb-3">Map Overlays</h3>
+            <div className="space-y-3 text-sm">
+              {OVERLAYS.map((overlay) => (
+                <label
+                  key={overlay}
+                  className="flex items-center cursor-pointer"
+                >
+                  {/* The hidden radio button */}
+                  <input
+                    type="radio"
+                    name="overlay-selection"
+                    value={overlay}
+                    checked={selectedOverlay === overlay}
+                    onChange={() => handleOverlayChange(overlay)}
+                    className="sr-only peer"
+                  />
+                  {/* The custom visual circle */}
+                <span
+                  className="
+                    h-4 w-4 
+                    rounded-full 
+                    border-2 border-[#25491B]
+                    bg-white
+                    transition-colors 
+                    duration-150
+                    
+                    peer-checked:bg-[#25491B]
+                    peer-checked:border-[#25491B]
+                  "
+                ></span>
+                  {/* The label text */}
+                  <span className="ml-2 text-[#25491B]">{overlay}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -180,7 +227,7 @@ export default function EcoMap({ onCoordinatesFinished }: { onCoordinatesFinishe
         center={[40.7128, -74.0060]}
         zoom={13}
         className="h-full w-full"
-        zoomControl={false} // ✅ 2. Disable the default control
+        zoomControl={false} // Disable the default control
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
@@ -193,7 +240,7 @@ export default function EcoMap({ onCoordinatesFinished }: { onCoordinatesFinishe
           onLayerCreated={handleLayerCreated}
         />
 
-        {/* ✅ 3. Add the new control in the desired position */}
+        {/* Add the new control in the desired position */}
         <ZoomControl position="bottomright" />
       </MapContainer>
     </div>

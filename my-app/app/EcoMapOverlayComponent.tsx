@@ -23,7 +23,7 @@ export default function EcoMapOverlayComponent() {
   return (
     <div
       className={`
-        bg-white shadow-lg w-82 mt-[20] ml-10 shadow-md 
+        bg-white shadow-lg w-200 mt-[20] ml-10 shadow-md 
         px-5 
         overflow-hidden
         ${
@@ -33,23 +33,26 @@ export default function EcoMapOverlayComponent() {
         }
       `}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center ">
         <div className="flex items-center space-x-2 pl-3">
           <img
             src="/logo.svg"
             alt="EcoMap's Logo"
             className="w-9 h-9 "
           />
-          <h1 className="text-xl font-semibold text-green-800">EcoMap</h1>
+          <h1 className="text-xl font-semibold text-[#25491B]">EcoMap</h1>
         </div>
-
-        <button className="text-2xl text-green-700" onClick={toggleMenu}>
+        <p className="ml-3 text-[#25491B]">|</p>
+        <div className="ml-3 text-[#25491B] text-lg">
+          <input className="w-130 border-none focus:outline-none" placeholder="Search"/>
+        </div>
+        {/* <button onClick={toggleMenu}>
           <img
             src="/menu.svg"
             alt="EcoMap's Logo"
             className="w-5 h-5 mr-2"
           />
-        </button>
+        </button> */}
       </div>
 
       {isOpen && (
