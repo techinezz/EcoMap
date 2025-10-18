@@ -3,8 +3,10 @@ import { Bot } from "lucide-react";
 import AIChat from "./AIChat";
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import EcoMap from "./map";
-import EcoMapOverlayComponent from "./EcoMapOverlayComponent";
+
+// Dynamically import map components to avoid SSR issues with Leaflet
+const EcoMap = dynamic(() => import("./map"), { ssr: false });
+const EcoMapOverlayComponent = dynamic(() => import("./EcoMapOverlayComponent"), { ssr: false });
 
 export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false);
