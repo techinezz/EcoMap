@@ -8,11 +8,19 @@ import EcoMapOverlayComponent from "./EcoMapOverlayComponent";
 
 export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [mapCoordinates, setMapCoordinates] = useState<any[]>([]);
+
+  const handleCoordinatesUpdate = (coordinates: any[]) => {
+    setMapCoordinates(coordinates);
+    // Automatically open chat when coordinates are received
+    setIsChatOpen(true);
+  };
 
   return (
-    <div className="h-screen w-screen relative">
-      <EcoMap />
-      
+    <div className="relative h-screen w-screen">
+      {/* Map */}
+      <EcoMap onCoordinatesFinished={handleCoordinatesUpdate} />
+
       {/* Chat Toggle Button */}
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
@@ -27,10 +35,11 @@ export default function Home() {
 
       {/* Chat Overlay */}
       {isChatOpen && (
-        <div className="fixed top-25 right-9 z-[1000] w-96 h-[600px] bg-white rounded-lg shadow-2xl overflow-hidden">
-          <AIChat />
+        <div className="fixed top-16 right-4 bottom-4 left-[40%] z-[1000] bg-white rounded-lg shadow-2xl overflow-hidden">
+          <AIChat selectedCoordinates={mapCoordinates} />
         </div>
       )}
+      
       <div className="absolute top-4 left-4 z-99999">
         <EcoMapOverlayComponent />
       </div>
