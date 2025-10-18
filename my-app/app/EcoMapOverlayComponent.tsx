@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 // --- 1. DEFINE & EXPORT LOCATION TYPES ---
 interface NominatimSuggestion {
@@ -25,6 +26,8 @@ interface EcoMapOverlayProps {
 export default function EcoMapOverlayComponent({
   onLocationSelect,
 }: EcoMapOverlayProps) {
+  const router = useRouter();
+
   // --- 3. ADD STATE FOR SEARCH ---
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<NominatimSuggestion[]>([]);
@@ -121,7 +124,10 @@ export default function EcoMapOverlayComponent({
         `}
       >
         <div className="flex items-center ">
-          <div className="flex items-center space-x-2 pl-3">
+          <div
+            className="flex items-center space-x-2 pl-3 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => router.push("/")}
+          >
             <img src="/logo.svg" alt="EcoMap's Logo" className="w-9 h-9 " />
             <h1 className="text-xl font-semibold text-[#25491B]">EcoMap</h1>
           </div>
