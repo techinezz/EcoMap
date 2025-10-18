@@ -340,14 +340,25 @@ function ChangeView({ target }: { target: TargetLocation | null }) {
   return null;
 }
 
+// --- Simulation Data Interface for passing to parent ---
+export interface SimulationData {
+  treeClusters: PointCluster[];
+  solarClusters: PointCluster[];
+  placedPavementPoints: PointPlacement[];
+  placedParks: PointPlacement[];
+  totalTreesPlaced: number;
+  totalSolarPlaced: number;
+}
+
 // --- Props Interface ---
 interface EcoMapProps {
   targetLocation: TargetLocation | null;
   onCoordinatesFinished?: (coordinates: any[]) => void;
+  onSimulationDataChange?: (data: SimulationData) => void;
 }
 
 // --- Main Component ---
-const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
+const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimulationDataChange }) => {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup | null>(null);
   const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
@@ -461,6 +472,21 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     console.log('Pavement Point data:', placedPavementPoints);
     console.log('Park Point data:', placedParks);
     console.log('--- End Simulation Data ---');
+
+    // Send simulation data to voice agent
+    if (onSimulationDataChange) {
+      const simulationData: SimulationData = {
+        treeClusters,
+        solarClusters,
+        placedPavementPoints,
+        placedParks,
+        totalTreesPlaced: placedTrees.length,
+        totalSolarPlaced: placedSolarPanels.length,
+      };
+      onSimulationDataChange(simulationData);
+      console.log('✅ Simulation data sent to voice agent:', simulationData);
+    }
+
     setSimulationMode(null);
   };
 

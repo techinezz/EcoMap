@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import EcoMapOverlayComponent, {
   TargetLocation,
 } from "./EcoMapOverlayComponent";
+import { SimulationData } from "./map";
 
 const EcoMap = dynamic(() => import("./map"), {
   ssr: false, // This is the most important part
@@ -15,6 +16,7 @@ const EcoMap = dynamic(() => import("./map"), {
 export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [mapCoordinates, setMapCoordinates] = useState<any[]>([]);
+  const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
 
   // --- 1. ADD THIS STATE ---
   const [targetLocation, setTargetLocation] = useState<TargetLocation | null>(
@@ -27,12 +29,17 @@ export default function Home() {
     setIsChatOpen(true);
   };
 
+  const handleSimulationDataChange = (data: SimulationData) => {
+    setSimulationData(data);
+  };
+
   return (
     <div className="relative h-screen w-screen">
       {/* Map */}
       {/* --- 2. PASS THE 'targetLocation' PROP HERE --- */}
       <EcoMap
         onCoordinatesFinished={handleCoordinatesUpdate}
+        onSimulationDataChange={handleSimulationDataChange}
         targetLocation={targetLocation}
       />
 
@@ -51,7 +58,10 @@ export default function Home() {
       {/* Chat Overlay */}
       {isChatOpen && (
         <div className="fixed top-25 right-9 bottom-4 left-[40%] z-[1000] bg-white rounded-lg shadow-2xl overflow-hidden">
-          <AIChat selectedCoordinates={mapCoordinates} />
+          <AIChat
+            selectedCoordinates={mapCoordinates}
+            simulationData={simulationData}
+          />
         </div>
       )}
 

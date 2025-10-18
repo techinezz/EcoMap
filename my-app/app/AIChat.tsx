@@ -5,6 +5,7 @@ import { Mic, Phone, PhoneOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useConversation } from '@elevenlabs/react';
 import CircularAudioVisualizer from './CircularAudioVisualizer';
+import { SimulationData } from './map';
 
 interface Message {
   id: string;
@@ -13,7 +14,13 @@ interface Message {
   timestamp: Date;
 }
 
-export default function AIChat({ selectedCoordinates }: { selectedCoordinates?: any[] }) {
+export default function AIChat({
+  selectedCoordinates,
+  simulationData,
+}: {
+  selectedCoordinates?: any[];
+  simulationData?: SimulationData | null;
+}) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -33,6 +40,8 @@ export default function AIChat({ selectedCoordinates }: { selectedCoordinates?: 
 
   // Prepare coordinate context whenever coordinates change
   const getCoordinateContext = () => {
+    let contextString = '';
+
     if (selectedCoordinates && selectedCoordinates.length > 0) {
       // Calculate approximate center of the selected area
       const coords = selectedCoordinates[0]; // First polygon
@@ -53,7 +62,7 @@ export default function AIChat({ selectedCoordinates }: { selectedCoordinates?: 
           `(Longitude: ${point[0].toFixed(6)}, Latitude: ${point[1].toFixed(6)})`
         ).join(', ');
 
-        return `The user has selected a specific area on the map for environmental analysis.
+        contextString = `The user has selected a specific area on the map for environmental analysis.
 
 LOCATION DETAILS:
 - Center Point: Longitude ${centerLon}, Latitude ${centerLat}
@@ -71,8 +80,65 @@ Please provide a detailed environmental and sustainability analysis for this spe
 - Climate risks
 - Sustainability recommendations`;
       }
+    } else {
+      contextString = 'No area has been selected on the map yet. The user needs to draw an area on the map before you can provide location-specific analysis.';
     }
-    return 'No area has been selected on the map yet. The user needs to draw an area on the map before you can provide location-specific analysis.';
+
+    // Add simulation data if available
+    if (simulationData) {
+      const hasSimulations =
+        simulationData.totalTreesPlaced > 0 ||
+        simulationData.totalSolarPlaced > 0 ||
+        simulationData.placedPavementPoints.length > 0 ||
+        simulationData.placedParks.length > 0;
+
+      if (hasSimulations) {
+        contextString += '\n\nUSER SIMULATION DATA:';
+        contextString += '\nThe user has placed the following sustainability interventions on the map:';
+
+        if (simulationData.totalTreesPlaced > 0) {
+          contextString += `\n\n🌳 TREES:`;
+          contextString += `\n- Total trees placed: ${simulationData.totalTreesPlaced}`;
+          contextString += `\n- Number of tree clusters: ${simulationData.treeClusters.length}`;
+          simulationData.treeClusters.forEach((cluster, idx) => {
+            contextString += `\n  • Cluster ${idx + 1}: ${cluster.count} trees at [${cluster.center[0].toFixed(6)}, ${cluster.center[1].toFixed(6)}]`;
+          });
+        }
+
+        if (simulationData.totalSolarPlaced > 0) {
+          contextString += `\n\n☀️ SOLAR PANELS:`;
+          contextString += `\n- Total solar panels placed: ${simulationData.totalSolarPlaced}`;
+          contextString += `\n- Number of solar clusters: ${simulationData.solarClusters.length}`;
+          simulationData.solarClusters.forEach((cluster, idx) => {
+            contextString += `\n  • Cluster ${idx + 1}: ${cluster.count} panels at [${cluster.center[0].toFixed(6)}, ${cluster.center[1].toFixed(6)}]`;
+          });
+        }
+
+        if (simulationData.placedPavementPoints.length > 0) {
+          contextString += `\n\n🛣️ PERMEABLE PAVEMENT:`;
+          contextString += `\n- Total pavement points: ${simulationData.placedPavementPoints.length}`;
+          simulationData.placedPavementPoints.forEach((point, idx) => {
+            contextString += `\n  • Point ${idx + 1}: [${point.center[0].toFixed(6)}, ${point.center[1].toFixed(6)}]`;
+          });
+        }
+
+        if (simulationData.placedParks.length > 0) {
+          contextString += `\n\n🏞️ PARKS:`;
+          contextString += `\n- Total parks placed: ${simulationData.placedParks.length}`;
+          simulationData.placedParks.forEach((park, idx) => {
+            contextString += `\n  • Park ${idx + 1}: [${park.center[0].toFixed(6)}, ${park.center[1].toFixed(6)}]`;
+          });
+        }
+
+        contextString += '\n\nPlease use this simulation data to provide insights about:';
+        contextString += '\n- The environmental impact of these interventions';
+        contextString += '\n- How these placements could affect air quality, temperature, stormwater management';
+        contextString += '\n- Suggestions for optimizing placement or adding additional interventions';
+        contextString += '\n- Cost estimates and timeline for implementing these changes';
+      }
+    }
+
+    return contextString;
   };
 
   // Store if we've sent the initial context
@@ -102,8 +168,16 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
           try {
             // Send context as initial message
+            console.log('Attempting to send context to agent...');
+            console.log('sendUserMessage exists?', 'sendUserMessage' in conversation);
+            console.log('sendUserMessage is function?', typeof conversation.sendUserMessage);
+
             if ('sendUserMessage' in conversation && typeof conversation.sendUserMessage === 'function') {
               conversation.sendUserMessage(contextToSend);
+              console.log('✅ Context message sent via sendUserMessage');
+            } else {
+              console.error('❌ sendUserMessage not available on conversation object');
+              console.log('Available methods:', Object.keys(conversation));
             }
             contextSentRef.current = true;
           } catch (error) {
@@ -130,8 +204,8 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
   // Update audio visualizer data
   useEffect(() => {
-    if (!isVoiceAgentOpen) {
-      // Reset audio data when voice agent is closed
+    if (!isVoiceAgentOpen || conversation.status !== 'connected') {
+      // Reset audio data when voice agent is closed or not connected
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
@@ -142,11 +216,11 @@ Please provide a detailed environmental and sustainability analysis for this spe
       return;
     }
 
-    // Always run the animation loop when voice agent is open
+    // Only run animation loop when voice agent is connected
     let isActive = true;
 
     const updateAudioData = () => {
-      if (!isActive) {
+      if (!isActive || conversation.status !== 'connected') {
         return;
       }
 
@@ -155,16 +229,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
         const inputData = conversation.getInputByteFrequencyData?.();
         const outputData = conversation.getOutputByteFrequencyData?.();
 
-        // Debug log to see if we're getting data
-        if (inputData || outputData) {
-          console.log('Audio data received:', {
-            inputLength: inputData?.length,
-            outputLength: outputData?.length,
-            inputSample: inputData ? Array.from(inputData.slice(0, 5)) : null,
-            outputSample: outputData ? Array.from(outputData.slice(0, 5)) : null,
-          });
-        }
-
+        // Update state with new audio data
         if (inputData && inputData.length > 0) {
           setInputAudioData(inputData);
         }
@@ -191,7 +256,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVoiceAgentOpen]);
+  }, [isVoiceAgentOpen, conversation.status]);
 
   const handleVoiceAgent = async () => {
     if (conversation.status === 'connected' || conversation.status === 'connecting') {
@@ -204,6 +269,19 @@ Please provide a detailed environmental and sustainability analysis for this spe
     try {
       const coordinateContext = getCoordinateContext();
 
+      console.log('=== VOICE AGENT STARTING ===');
+      console.log('Simulation Data available:', simulationData);
+      if (simulationData) {
+        console.log('- Total trees:', simulationData.totalTreesPlaced);
+        console.log('- Total solar:', simulationData.totalSolarPlaced);
+        console.log('- Pavement points:', simulationData.placedPavementPoints.length);
+        console.log('- Parks:', simulationData.placedParks.length);
+        console.log('- Tree clusters:', simulationData.treeClusters.length);
+        console.log('- Solar clusters:', simulationData.solarClusters.length);
+      }
+      console.log('Full context length:', coordinateContext.length);
+      console.log('Full context:', coordinateContext);
+      console.log('=== END DEBUG ===');
       console.log('Getting signed URL from server...');
 
       // Get signed URL from our API route
