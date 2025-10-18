@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import { useConversation } from '@elevenlabs/react';
 import CircularAudioVisualizer from './CircularAudioVisualizer';
 import { SimulationData } from './map';
+import { calculateEcoScore, EcoScoreResult } from '@/lib/ecoScoreCalculator';
 
 interface Message {
   id: string;
@@ -17,15 +18,21 @@ interface Message {
 export default function AIChat({
   selectedCoordinates,
   simulationData,
+  isChallengeMode = false,
+  onChallengeEnd,
 }: {
   selectedCoordinates?: any[];
   simulationData?: SimulationData | null;
+  isChallengeMode?: boolean;
+  onChallengeEnd?: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your map assistant. I can help you analyze locations, understand geographic data, and provide insights about specific areas. What would you like to know about the map?',
+      content: isChallengeMode
+        ? '🎯 Challenge Mode Activated! I\'ve identified environmental issues in this area. Ask me about the location to understand what sustainability interventions might help. Use trees, solar panels, permeable pavement, and parks to improve the EcoScore!'
+        : 'Hello! I\'m your map assistant. I can help you analyze locations, understand geographic data, and provide insights about specific areas. What would you like to know about the map?',
       timestamp: new Date(),
     },
   ]);
@@ -37,10 +44,65 @@ export default function AIChat({
   const [outputAudioData, setOutputAudioData] = useState<Uint8Array>(new Uint8Array(128));
   const animationFrameRef = useRef<number | undefined>(undefined);
   const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
+  const [ecoScoreResult, setEcoScoreResult] = useState<EcoScoreResult | null>(null);
+  const [showEcoScoreResult, setShowEcoScoreResult] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState<Message[]>([]);
+
+  // Auto-start voice agent in challenge mode
+  useEffect(() => {
+    if (isChallengeMode && !isVoiceAgentOpen && conversation.status === 'disconnected') {
+      console.log('Challenge mode: Auto-starting voice agent');
+      // Small delay to ensure component is mounted
+      const timer = setTimeout(() => {
+        handleVoiceAgent();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isChallengeMode]);
+
+  // Calculate EcoScore when simulation data changes in challenge mode
+  useEffect(() => {
+    if (isChallengeMode && simulationData) {
+      const hasAnySimulation =
+        simulationData.totalTreesPlaced > 0 ||
+        simulationData.totalSolarPlaced > 0 ||
+        simulationData.placedPavementPoints.length > 0 ||
+        simulationData.placedParks.length > 0;
+
+      if (hasAnySimulation) {
+        const result = calculateEcoScore(simulationData);
+        setEcoScoreResult(result);
+        setShowEcoScoreResult(true);
+
+        // Add EcoScore message to chat
+        const scoreMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `## 🎯 EcoScore Results\n\n**Total Score: ${result.totalScore}/1000**\n\n### Breakdown:\n- 🌳 Trees: ${result.breakdown.treesScore}/300\n- ☀️ Solar Panels: ${result.breakdown.solarScore}/250\n- 🌊 Permeable Pavement: ${result.breakdown.pavementScore}/250\n- 🏞️ Parks: ${result.breakdown.parkScore}/200\n\n${result.feedback}`,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, scoreMessage]);
+      }
+    }
+  }, [simulationData, isChallengeMode]);
 
   // Prepare coordinate context whenever coordinates change
   const getCoordinateContext = () => {
     let contextString = '';
+
+    // Add challenge mode context
+    if (isChallengeMode) {
+      contextString += 'CHALLENGE MODE ACTIVE:\n';
+      contextString += 'You are helping the user solve an environmental challenge puzzle.\n';
+      contextString += 'The user has selected a specific area with environmental issues.\n';
+      contextString += 'Your role:\n';
+      contextString += '- Describe environmental problems in this area (air quality, lack of green space, heat island effect, water runoff issues, etc.)\n';
+      contextString += '- Give hints about what sustainability solutions might help (trees, solar panels, permeable pavement, parks)\n';
+      contextString += '- Answer questions about the location and environmental issues\n';
+      contextString += '- DO NOT give exact solutions or tell them exactly where to place items\n';
+      contextString += '- Encourage them to think critically about the environmental challenges\n\n';
+    }
 
     if (selectedCoordinates && selectedCoordinates.length > 0) {
       // Calculate approximate center of the selected area
@@ -195,7 +257,19 @@ Please provide a detailed environmental and sustainability analysis for this spe
       console.error('ElevenLabs error:', error);
     },
     onMessage: (message) => {
-      console.log('Message:', message);
+      console.log('Voice Message:', message);
+
+      // Add message to voice transcript in challenge mode
+      if (isChallengeMode && message) {
+        const transcriptMessage: Message = {
+          id: Date.now().toString() + Math.random(),
+          role: message.source === 'user' || message.source === 'client' ? 'user' : 'assistant',
+          content: message.message || message.text || '',
+          timestamp: new Date(),
+        };
+
+        setVoiceTranscript((prev) => [...prev, transcriptMessage]);
+      }
     },
     onModeChange: (mode) => {
       console.log('Mode changed:', mode);
@@ -496,13 +570,31 @@ Please provide a detailed environmental and sustainability analysis for this spe
         <div className="flex flex-col h-full p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900">Voice Assistant</h2>
-            <button
-              onClick={handleBackToChat}
-              className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Back to Chat
-            </button>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-semibold text-gray-900">
+                {isChallengeMode ? 'Challenge Mode' : 'Voice Assistant'}
+              </h2>
+              {isChallengeMode && (
+                <span className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-full font-medium">
+                  🎯 Active
+                </span>
+              )}
+            </div>
+            {isChallengeMode && onChallengeEnd ? (
+              <button
+                onClick={onChallengeEnd}
+                className="px-4 py-2 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium"
+              >
+                End Challenge
+              </button>
+            ) : (
+              <button
+                onClick={handleBackToChat}
+                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Back to Chat
+              </button>
+            )}
           </div>
 
           {/* Location Context */}
@@ -527,63 +619,156 @@ Please provide a detailed environmental and sustainability analysis for this spe
             </span>
           </div>
 
-          {/* Audio Visualizers - Centered and Larger */}
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex gap-12">
-              <div className="text-center">
-                <CircularAudioVisualizer
-                  audioData={inputAudioData}
-                  size={180}
-                  barCount={64}
-                  barColor="#ABD2A9"
-                />
-                <p className="text-sm text-gray-600 mt-4 font-medium">Your Voice</p>
+          {/* Challenge Mode: Transcript View */}
+          {isChallengeMode ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Voice Conversation Transcript</h3>
+
+              {/* Transcript Messages */}
+              <div className="flex-1 overflow-y-auto space-y-4 mb-4 bg-gray-50 rounded-lg p-4">
+                {voiceTranscript.length === 0 ? (
+                  <div className="text-center text-gray-500 mt-8">
+                    <p>Start speaking to see the conversation transcript...</p>
+                    <p className="text-sm mt-2">Your voice and AI responses will appear here as text</p>
+                  </div>
+                ) : (
+                  voiceTranscript.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${
+                        message.role === 'user' ? 'justify-end' : 'justify-start'
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[75%] rounded-lg px-4 py-3 ${
+                          message.role === 'user'
+                            ? 'bg-[#ABD2A9] text-gray-900'
+                            : 'bg-white text-gray-900 border border-gray-200'
+                        }`}
+                      >
+                        <p className="text-sm">{message.content}</p>
+                        <span className="text-xs opacity-70 mt-1 block">
+                          {message.timestamp.toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
               </div>
-              <div className="text-center">
-                <CircularAudioVisualizer
-                  audioData={outputAudioData}
-                  size={180}
-                  barCount={64}
-                  barColor="#9BC299"
-                />
-                <p className="text-sm text-gray-600 mt-4 font-medium">AI Voice</p>
+
+              {/* EcoScore Display */}
+              {ecoScoreResult && (
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 border border-green-200">
+                  <div className="text-center">
+                    <h4 className="text-lg font-bold text-gray-800 mb-2">🎯 EcoScore</h4>
+                    <div className="text-4xl font-bold text-green-700 mb-2">
+                      {ecoScoreResult.totalScore}/1000
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-white rounded p-2">
+                        <span className="font-medium">🌳 Trees:</span> {ecoScoreResult.breakdown.treesScore}/300
+                      </div>
+                      <div className="bg-white rounded p-2">
+                        <span className="font-medium">☀️ Solar:</span> {ecoScoreResult.breakdown.solarScore}/250
+                      </div>
+                      <div className="bg-white rounded p-2">
+                        <span className="font-medium">🌊 Pavement:</span> {ecoScoreResult.breakdown.pavementScore}/250
+                      </div>
+                      <div className="bg-white rounded p-2">
+                        <span className="font-medium">🏞️ Parks:</span> {ecoScoreResult.breakdown.parkScore}/200
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Normal Mode: Audio Visualizers */
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex gap-12">
+                <div className="text-center">
+                  <CircularAudioVisualizer
+                    audioData={inputAudioData}
+                    size={180}
+                    barCount={64}
+                    barColor="#ABD2A9"
+                  />
+                  <p className="text-sm text-gray-600 mt-4 font-medium">Your Voice</p>
+                </div>
+                <div className="text-center">
+                  <CircularAudioVisualizer
+                    audioData={outputAudioData}
+                    size={180}
+                    barCount={64}
+                    barColor="#9BC299"
+                  />
+                  <p className="text-sm text-gray-600 mt-4 font-medium">AI Voice</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Controls */}
-          <div className="mt-6 flex gap-3">
-            {conversation.status === 'connected' ? (
-              <button
-                onClick={handleEndVoiceAgent}
-                className="flex-1 px-6 py-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2 font-medium"
-              >
-                <PhoneOff size={24} />
-                End Call
-              </button>
-            ) : (
-              <button
-                onClick={handleVoiceAgent}
-                className="flex-1 px-6 py-4 bg-[#25491B] text-white rounded-lg hover:bg-[#1a3513] transition-colors flex items-center justify-center gap-2 font-medium"
-                disabled={conversation.status === 'connecting'}
-              >
-                <Phone size={24} />
-                {conversation.status === 'connecting' ? 'Connecting...' : 'Start Call'}
-              </button>
-            )}
-          </div>
+          {/* Controls - Hidden in challenge mode */}
+          {!isChallengeMode && (
+            <div className="mt-6 flex gap-3">
+              {conversation.status === 'connected' ? (
+                <button
+                  onClick={handleEndVoiceAgent}
+                  className="flex-1 px-6 py-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2 font-medium"
+                >
+                  <PhoneOff size={24} />
+                  End Call
+                </button>
+              ) : (
+                <button
+                  onClick={handleVoiceAgent}
+                  className="flex-1 px-6 py-4 bg-[#25491B] text-white rounded-lg hover:bg-[#1a3513] transition-colors flex items-center justify-center gap-2 font-medium"
+                  disabled={conversation.status === 'connecting'}
+                >
+                  <Phone size={24} />
+                  {conversation.status === 'connecting' ? 'Connecting...' : 'Start Call'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         /* Text Chat Mode - Full Screen */
         <div className="flex flex-col h-full p-4">
           {/* Header */}
-          <div className="flex items-center justify-end mb-4 pb-3">
-            <button
-              onClick={() => setMessages([messages[0]])}
-              className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-            >
-              Clear
-            </button>
+          <div className="flex items-center justify-between mb-4 pb-3">
+            {isChallengeMode && (
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded font-medium">
+                  🎯 Challenge Mode
+                </span>
+                {ecoScoreResult && (
+                  <span className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded font-medium">
+                    Score: {ecoScoreResult.totalScore}/1000
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2 ml-auto">
+              {isChallengeMode && onChallengeEnd && (
+                <button
+                  onClick={onChallengeEnd}
+                  className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors font-medium"
+                >
+                  End Challenge
+                </button>
+              )}
+              <button
+                onClick={() => setMessages([messages[0]])}
+                className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
           </div>
 
           {/* Messages Container */}
@@ -655,18 +840,20 @@ Please provide a detailed environmental and sustainability analysis for this spe
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message..."
+          placeholder={isChallengeMode ? "Ask about the location..." : "Type your message..."}
           disabled={isLoading}
           className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ABD2A9] bg-white text-gray-900 disabled:opacity-50"
         />
-        <button
-          type="button"
-          onClick={handleVoiceAgent}
-          className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-          title="Voice Chat"
-        >
-          <Mic size={20} />
-        </button>
+        {!isChallengeMode && (
+          <button
+            type="button"
+            onClick={handleVoiceAgent}
+            className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            title="Voice Chat"
+          >
+            <Mic size={20} />
+          </button>
+        )}
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
