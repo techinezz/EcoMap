@@ -55,57 +55,6 @@ export default function EcoMapOverlayComponent() {
         </button> */}
       </div>
 
-      {isOpen && (
-        <div className="pt-4 mt-[-7px] border-gray-200 text-[#25491B] ml-1">
-          <h2 className="text-md font-bold mb-2 ">Overlays</h2>
-
-          {/* 2. The radio buttons are visible when open */}
-          <div className="space-y-2 text-sm ">
-            {OVERLAYS.map((overlay) => (
-              <label
-                key={overlay} // Important for React list performance
-                className="flex items-center cursor-pointer"
-              >
-                {/* ✅ 1. The REAL radio button is hidden but still functional.
-                    - 'sr-only' hides it visually but keeps it for accessibility.
-                    - 'peer' tells Tailwind to watch its state.
-                */}
-                <input
-                  type="radio"
-                  name="overlay-selection" // Groups all buttons so only one can be selected
-                  value={overlay}
-                  // 🌟 The Selection Logic: Is the current overlay the one stored in state?
-                  checked={selectedOverlay === overlay}
-                  // 🌟 The Update Logic: Call the handler with this button's value when clicked
-                  onChange={() => handleOverlayChange(overlay)}
-                  // Tailwind form styling (requires @tailwindcss/forms plugin)
-                  className="sr-only peer"
-                />
-
-                {/* ✅ 2. This 'span' is our NEW VISUAL radio button.
-                    - It's styled as an empty, bordered circle by default.
-                */}
-                <span
-                  className="
-                    h-4 w-4 
-                    rounded-full 
-                    border-2 border-[#25491B]
-                    bg-white
-                    transition-colors 
-                    duration-150
-                    
-                    peer-checked:bg-[#25491B]
-                    peer-checked:border-[#25491B]
-                  "
-                ></span>
-
-                {/* 3. The label text */}
-                <span className="ml-2 text-[#25491B]">{overlay}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
