@@ -306,7 +306,7 @@ function ChangeView({ target }: { target: TargetLocation | null }) {
   useEffect(() => {
     if (target && target.bounds) {
         try {
-            const bounds = L.latLngBounds(target.bounds);
+            const bounds = L.latLngBounds(target.bounds as L.LatLngBoundsLiteral);
             if (bounds.isValid()) {
                 map.flyToBounds(bounds, { padding: [50, 50] });
             }
@@ -333,10 +333,19 @@ interface EcoMapProps {
   targetLocation: TargetLocation | null;
   onCoordinatesFinished?: (coordinates: any[]) => void;
   onSimulationDataChange?: (data: SimulationData) => void;
+  onChallengeStart?: () => void;
+  onChallengeEnd?: () => void;
 }
 
 
-const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
+const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimulationDataChange, onChallengeStart, onChallengeEnd }) => {
+  console.log('🗺️ EcoMap rendered with props:', {
+    hasOnChallengeStart: !!onChallengeStart,
+    hasOnChallengeEnd: !!onChallengeEnd,
+    hasOnCoordinatesFinished: !!onCoordinatesFinished,
+    hasOnSimulationDataChange: !!onSimulationDataChange,
+  });
+
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup | null>(null);
   const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
@@ -352,9 +361,21 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
   const [placedParks, setPlacedParks] = useState<PointPlacement[]>([]);
   const MAX_CLUSTERS = 20;
   const [showMaxClusterAlert, setShowMaxClusterAlert] = useState(false);
-  
+
   const [isChallengeActive, setIsChallengeActive] = useState(false);
   const [challengeBounds, setChallengeBounds] = useState<L.LatLngBounds | null>(null);
+  const [challengeCoords, setChallengeCoords] = useState<LatLngTuple[]>([]);
+  const [isGeneratingChallenge, setIsGeneratingChallenge] = useState(false);
+
+  // Expose retry handler for parent
+  useEffect(() => {
+    (window as any).mapChallengeRetry = handleChallengeRetry;
+    (window as any).mapChallengePlayAgain = handleStartChallenge;
+    return () => {
+      delete (window as any).mapChallengeRetry;
+      delete (window as any).mapChallengePlayAgain;
+    };
+  }, [challengeCoords]);
 
   const newYorkCenter: LatLngTuple = [40.7128, -74.006];
   const defaultZoom = 19;
@@ -419,6 +440,17 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     setSimulationMode(null);
     setIsChallengeActive(false);
     setChallengeBounds(null);
+    setChallengeCoords([]);
+
+    // End challenge mode
+    if (onChallengeEnd) {
+      onChallengeEnd();
+    }
+
+    // Also call window function to end challenge
+    if (typeof window !== 'undefined' && (window as any).pageChallengeEnd) {
+      (window as any).pageChallengeEnd();
+    }
   };
 
   const toggleOverlayMenu = () => {
@@ -476,19 +508,26 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     console.log('Park Point data:', placedParks);
     console.log('--- End Simulation Data ---');
 
-    // Send simulation data to voice agent
+    const simulationData: SimulationData = {
+      treeClusters,
+      solarClusters,
+      placedPavementPoints,
+      placedParks,
+      totalTreesPlaced: placedTrees.length,
+      totalSolarPlaced: placedSolarPanels.length,
+    };
+
+    // Method 1: Send via callback
     if (onSimulationDataChange) {
-      const simulationData: SimulationData = {
-        treeClusters,
-        solarClusters,
-        placedPavementPoints,
-        placedParks,
-        totalTreesPlaced: placedTrees.length,
-        totalSolarPlaced: placedSolarPanels.length,
-      };
       onSimulationDataChange(simulationData);
-      console.log('✅ Simulation data sent to voice agent:', simulationData);
+      console.log('✅ Simulation data sent via callback:', simulationData);
     }
+
+    // Method 2: Send via window event for ChallengeChat
+    window.dispatchEvent(new CustomEvent('challengeSimulationData', {
+      detail: { simulationData }
+    }));
+    console.log('✅ Simulation data sent via window event');
 
     setSimulationMode(null);
   };
@@ -533,34 +572,125 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
     [treeClusters.length, solarClusters.length, placedPavementPoints.length, placedParks.length, triggerMaxClusterAlert]
   );
 
-  const challengePolygonCoords: LatLngTuple[] = [
-    [37.8000, -122.4600],
-    [37.8000, -122.4550],
-    [37.7975, -122.4550],
-    [37.7975, -122.4600],
-  ];
+  const handleChallengeRetry = () => {
+    // Clear simulations but keep the challenge area and coordinates
+    setPlacedTrees([]);
+    setTreeClusters([]);
+    setPlacedSolarPanels([]);
+    setSolarClusters([]);
+    setPlacedPavementPoints([]);
+    setPlacedParks([]);
+    setSimulationMode(null);
 
-  const handleStartChallenge = () => {
-    handleClearLayers();
+    console.log("Challenge retry: Simulations cleared, keeping challenge area");
+  };
 
-    if (featureGroupRef.current && mapRef.current) {
+  const handleStartChallenge = async () => {
+    console.log('🔴🔴🔴 START CHALLENGE BUTTON CLICKED! 🔴🔴🔴');
+    alert('Start Challenge button was clicked!');
+
+    setIsGeneratingChallenge(true);
+
+    try {
+      console.log('Fetching challenge coordinates...');
+      // Call API to generate random coordinates
+      const response = await fetch('/api/generate-challenge-coords', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API Error Response:', errorData);
+        throw new Error(`Failed to generate challenge coordinates: ${errorData.error || response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('API Response:', data);
+      const generatedCoords: LatLngTuple[] = data.coordinates;
+
+      console.log('Generated challenge area:', data.location);
+      console.log('Coordinates:', generatedCoords);
+
+      // Clear previous challenge data
+      handleClearLayers();
+
+      if (featureGroupRef.current && mapRef.current) {
         const map = mapRef.current;
         const featureGroup = featureGroupRef.current;
-        const polygon = L.polygon(challengePolygonCoords, { color: '#488a36ff' });
-        
+        const polygon = L.polygon(generatedCoords, { color: '#488a36ff' });
+
         featureGroup.addLayer(polygon);
-        
+
         const bounds = polygon.getBounds();
         setChallengeBounds(bounds);
+        setChallengeCoords(generatedCoords);
         setIsChallengeActive(true);
-        
+
         map.flyToBounds(bounds, { padding: [50, 50] });
 
-        // ✅ REMOVED: No longer opens Gemini on challenge start
-        
-        console.log("Challenge started! Area: Presidio, San Francisco.");
-    } else {
+        console.log("🚀 Challenge started! Area:", data.location);
+
+        // IMPORTANT: Notify parent that challenge has started FIRST
+        // Use MULTIPLE methods to ensure it works
+        console.log("🔍 Checking onChallengeStart callback:", typeof onChallengeStart);
+
+        // Method 1: Try the callback if it exists
+        if (onChallengeStart) {
+          console.log("📢 Calling onChallengeStart callback!");
+          onChallengeStart();
+          console.log("✅ onChallengeStart callback called");
+        } else {
+          console.error("❌ onChallengeStart callback is undefined!");
+        }
+
+        // Method 2: Call global window function directly (MOST RELIABLE)
+        console.log("📢 Calling window.pageChallengeStart()");
+        if (typeof window !== 'undefined' && (window as any).pageChallengeStart) {
+          (window as any).pageChallengeStart();
+          console.log("✅ window.pageChallengeStart() called successfully");
+        } else {
+          console.error("❌ window.pageChallengeStart is undefined!");
+        }
+
+        // Method 3: Emit window event as final backup
+        console.log("📢 Emitting window event: challengeStart");
+        window.dispatchEvent(new CustomEvent('challengeStart'));
+        console.log("✅ Window event emitted");
+
+        // Wait a tiny bit for state to propagate
+        setTimeout(() => {
+          // Send coordinates to Gemini for analysis
+          const geoJSONCoords = [generatedCoords.map(coord => [coord[1], coord[0]])];
+
+          // Method 1: Callback
+          if (onCoordinatesFinished) {
+            try {
+              console.log("📍 Sending coordinates via callback");
+              onCoordinatesFinished(geoJSONCoords);
+            } catch (error) {
+              console.error("Error converting coordinates for Gemini:", error);
+            }
+          } else {
+            console.error("❌ onCoordinatesFinished callback is undefined!");
+          }
+
+          // Method 2: Window event
+          console.log("📍 Sending coordinates via window event");
+          window.dispatchEvent(new CustomEvent('challengeCoordinates', {
+            detail: { coordinates: geoJSONCoords }
+          }));
+        }, 100);
+      } else {
         console.error("Map or FeatureGroup ref not ready for challenge start.");
+      }
+    } catch (error) {
+      console.error('Error generating challenge:', error);
+      alert('Failed to generate challenge area. Please try again.');
+    } finally {
+      setIsGeneratingChallenge(false);
     }
   };
 
@@ -673,7 +803,13 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
       </div>
         {!isChallengeActive && (
             <div className="bg-[#25491B] text-sm text-white p-4 rounded-full cursor-pointer shadow-lg hover:bg-green-800 transition-colors z-1002 absolute right-[100px] top-[36px]">
-            <button onClick={handleStartChallenge} className="cursor-pointer">Start Challenge</button>
+            <button
+              onClick={handleStartChallenge}
+              className="cursor-pointer"
+              disabled={isGeneratingChallenge}
+            >
+              {isGeneratingChallenge ? 'Generating...' : 'Start Challenge'}
+            </button>
             </div>
         )}
        {/* Max Cluster Alert Message */}
@@ -725,7 +861,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
         )}
 
         {/* Drawing Feature Group */}
-        <FeatureGroup ref={featureGroupRef as React.RefObject<L.FeatureGroup<any>> | null} />
+        <FeatureGroup ref={featureGroupRef as React.RefObject<L.FeatureGroup<any>>} />
 
         {/* Placed Items Layers */}
         <MarkerClusterGroup chunkedLoading maxClusterRadius={40}>
@@ -770,7 +906,7 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
         <LocationFinder onLocationFound={setCurrentCenter} />
         <MapClickHandler
             simulationMode={simulationMode}
-            featureGroupRef={featureGroupRef as React.RefObject<L.FeatureGroup<any>> | null}
+            featureGroupRef={featureGroupRef as React.RefObject<L.FeatureGroup | null>}
             brushSize={brushSize}
             onItemPlaced={handleItemPlaced}
             maxClusters={MAX_CLUSTERS}

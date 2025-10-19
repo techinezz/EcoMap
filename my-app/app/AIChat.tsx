@@ -14,12 +14,37 @@ interface Message {
   timestamp: Date;
 }
 
+type ChallengeMode = 'inactive' | 'simulating' | 'scored' | 'learning';
+
+interface EcoScoreData {
+  ecoscore: number;
+  breakdown: {
+    relevance: number;
+    quantity: number;
+    diversity: number;
+    distribution: number;
+  };
+  feedback: {
+    whatWorked: string;
+    whatDidntWork: string;
+    optimalSolution: string;
+  };
+}
+
 export default function AIChat({
   selectedCoordinates,
   simulationData,
+  challengeMode = 'inactive',
+  onChallengeRetry,
+  onChallengePlayAgain,
+  onChallengeEnd,
 }: {
   selectedCoordinates?: any[];
   simulationData?: SimulationData | null;
+  challengeMode?: ChallengeMode;
+  onChallengeRetry?: () => void;
+  onChallengePlayAgain?: () => void;
+  onChallengeEnd?: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -37,6 +62,9 @@ export default function AIChat({
   const [outputAudioData, setOutputAudioData] = useState<Uint8Array>(new Uint8Array(128));
   const animationFrameRef = useRef<number | undefined>(undefined);
   const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
+  const [ecoScoreData, setEcoScoreData] = useState<EcoScoreData | null>(null);
+  const [isCalculatingScore, setIsCalculatingScore] = useState(false);
+  const [internalChallengeMode, setInternalChallengeMode] = useState<ChallengeMode>('inactive');
 
   // Prepare coordinate context whenever coordinates change
   const getCoordinateContext = () => {
@@ -458,6 +486,87 @@ Please provide a detailed environmental and sustainability analysis for this spe
     }
   };
 
+  const handleSubmitSimulation = async () => {
+    if (!simulationData || !geminiAnalysis) {
+      alert('Please wait for the area analysis to complete first.');
+      return;
+    }
+
+    setIsCalculatingScore(true);
+
+    try {
+      const response = await fetch('/api/calculate-ecoscore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationAnalysis: geminiAnalysis,
+          simulationData: simulationData,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to calculate EcoScore');
+      }
+
+      const data = await response.json();
+      setEcoScoreData(data);
+      setInternalChallengeMode('scored');
+
+      // Add ecoscore message to chat
+      const scoreMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `## 🎯 Your EcoScore: ${data.ecoscore}/1000\n\n**Score Breakdown:**\n- 📊 Relevance: ${data.breakdown.relevance}/500\n- 📈 Quantity: ${data.breakdown.quantity}/250\n- 🌈 Diversity: ${data.breakdown.diversity}/150\n- 📍 Distribution: ${data.breakdown.distribution}/100\n\n**What would you like to do next?**\n- See detailed feedback\n- Retry this challenge\n- Play again with a new location\n- End challenge`,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, scoreMessage]);
+    } catch (error) {
+      console.error('Error calculating EcoScore:', error);
+      alert('Failed to calculate EcoScore. Please try again.');
+    } finally {
+      setIsCalculatingScore(false);
+    }
+  };
+
+  const handleLearnWhy = () => {
+    if (!ecoScoreData) return;
+
+    setInternalChallengeMode('learning');
+
+    const feedbackMessage: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: `## 📚 Detailed Feedback\n\n**What Improved Your Score:**\n${ecoScoreData.feedback.whatWorked}\n\n**What Decreased Your Score:**\n${ecoScoreData.feedback.whatDidntWork}\n\n**Optimal Solution:**\n${ecoScoreData.feedback.optimalSolution}\n\n**What would you like to do next?**\n- Retry this challenge\n- Play again with a new location\n- End challenge`,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, feedbackMessage]);
+  };
+
+  // Sync challenge mode
+  useEffect(() => {
+    console.log('🎮 Challenge mode prop changed:', challengeMode, '(internal:', internalChallengeMode, ')');
+
+    if (challengeMode !== internalChallengeMode) {
+      setInternalChallengeMode(challengeMode);
+
+      // Clear messages when challenge starts
+      if (challengeMode === 'simulating') {
+        console.log('🧹 Clearing messages for challenge start');
+        setMessages([{
+          id: '1',
+          role: 'assistant',
+          content: 'Challenge mode activated! Analyzing your selected area...',
+          timestamp: new Date(),
+        }]);
+        setEcoScoreData(null);
+      }
+    }
+  }, [challengeMode]);
+
   // When coordinates are received, automatically send them to AI
   const prevCoordinatesRef = useRef<any[]>([]);
 
@@ -468,7 +577,14 @@ Please provide a detailed environmental and sustainability analysis for this spe
         JSON.stringify(selectedCoordinates) !== JSON.stringify(prevCoordinatesRef.current)) {
 
       prevCoordinatesRef.current = selectedCoordinates;
-      const autoMessage = 'Analyze the area I just selected on the map.';
+
+      // In challenge mode, use special prompt (check BOTH challengeMode prop and internal state)
+      const autoMessage = (challengeMode === 'simulating' || internalChallengeMode === 'simulating')
+        ? 'Analyze the area I just selected on the map. Focus ONLY on environmental issues that can be addressed with trees, solar panels, permeable pavements, and parks. Do NOT provide solutions - just describe the key issues.'
+        : 'Analyze the area I just selected on the map.';
+
+      console.log('🔍 Challenge mode check:', { challengeMode, internalChallengeMode, autoMessage });
+
       handleAutoAnalysis(autoMessage);
 
       // If voice agent is connected, send contextual update
@@ -487,7 +603,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCoordinates]);
+  }, [selectedCoordinates, challengeMode]);
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -649,32 +765,80 @@ Please provide a detailed environmental and sustainability analysis for this spe
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message..."
-          disabled={isLoading}
-          className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ABD2A9] bg-white text-gray-900 disabled:opacity-50"
-        />
-        <button
-          type="button"
-          onClick={handleVoiceAgent}
-          className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-          title="Voice Chat"
-        >
-          <Mic size={20} />
-        </button>
-        <button
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          className="px-6 py-3 bg-[#ABD2A9] text-white rounded-lg hover:bg-[#9BC299] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-        >
-          Send
-        </button>
+      {/* Input Form / Challenge Controls */}
+      {(() => {
+        console.log('🎨 Rendering UI - prop:', challengeMode, 'internal:', internalChallengeMode, 'simData:', !!simulationData);
+        return null;
+      })()}
+      {(challengeMode === 'simulating' || internalChallengeMode === 'simulating') ? (
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={handleSubmitSimulation}
+            disabled={isCalculatingScore || !simulationData}
+            className="w-full px-6 py-4 bg-[#25491B] text-white rounded-lg hover:bg-[#1a3513] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            {isCalculatingScore ? 'Calculating Score...' : 'Submit Simulation'}
+          </button>
+          <p className="text-xs text-gray-500 text-center">
+            Place your sustainability interventions on the map, then submit for scoring
+          </p>
+        </div>
+      ) : (challengeMode === 'scored' || challengeMode === 'learning' || internalChallengeMode === 'scored' || internalChallengeMode === 'learning') ? (
+        <div className="grid grid-cols-2 gap-2">
+          {internalChallengeMode === 'scored' && (
+            <button
+              onClick={handleLearnWhy}
+              className="px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+            >
+              Learn Why
+            </button>
+          )}
+          <button
+            onClick={onChallengeRetry}
+            className="px-4 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors font-medium"
+          >
+            Retry
+          </button>
+          <button
+            onClick={onChallengePlayAgain}
+            className="px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+          >
+            Play Again
+          </button>
+          <button
+            onClick={onChallengeEnd}
+            className="px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+          >
+            End Challenge
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your message..."
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ABD2A9] bg-white text-gray-900 disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={handleVoiceAgent}
+            className="p-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            title="Voice Chat"
+          >
+            <Mic size={20} />
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            className="px-6 py-3 bg-[#ABD2A9] text-white rounded-lg hover:bg-[#9BC299] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+          >
+            Send
+          </button>
         </form>
+      )}
         </div>
       )}
     </div>

@@ -29,11 +29,39 @@ export async function POST(request: NextRequest) {
     let coordinateContext = '';
     let isInitialAnalysis = false;
 
+    // Check if this is a challenge mode request
+    const isChallengeMode = prompt.toLowerCase().includes('do not provide solutions');
+
     if (coordinates && coordinates.length > 0) {
       // Check if this is the initial analysis request
       isInitialAnalysis = prompt.toLowerCase().includes('analyze the area i just selected');
 
-      if (isInitialAnalysis) {
+      if (isInitialAnalysis && isChallengeMode) {
+        // Challenge mode: Issues only, no solutions
+        coordinateContext = `\n\nIMPORTANT: The user has selected the following area(s) on the map:\n${JSON.stringify(coordinates, null, 2)}\n\nThese coordinates are in [longitude, latitude] format.
+
+REQUIRED RESPONSE FORMAT for CHALLENGE MODE coordinate analysis:
+You MUST structure your response exactly as follows:
+
+1. **Location Identification** 📍:
+   - Start with "You selected [specific area description]."
+   - Be VERY specific: Include neighborhood names, street boundaries if possible, notable landmarks, and exact borough/district
+   - Example: "You selected an area in Chelsea and Greenwich Village, bounded approximately by West 34th Street to the north, West 14th Street to the south, 8th Avenue to the east, and the Hudson River to the west in Manhattan, New York City, New York, USA."
+
+2. **Key Issues**
+   - List EXACTLY 2-4 primary sustainability challenges this specific area faces
+   - ONLY focus on issues that can be addressed with: trees 🌳, solar panels ☀️, permeable pavements 🛣️, and parks 🏞️
+   - Examples: urban heat islands, flooding, stormwater runoff, air quality, lack of green space, high energy consumption
+   - For EACH issue, explain:
+     * What the problem is
+     * Why it's a concern in this specific area
+     * Which interventions (trees/solar/pavement/parks) would be most relevant
+   - Keep each issue to 2-3 sentences
+
+CRITICAL: Do NOT provide solutions or recommendations. Only describe the issues. The user will create their own solutions.
+
+Use clear formatting with headers, bullet points, and emojis.`;
+      } else if (isInitialAnalysis) {
         coordinateContext = `\n\nIMPORTANT: The user has selected the following area(s) on the map:\n${JSON.stringify(coordinates, null, 2)}\n\nThese coordinates are in [longitude, latitude] format.
 
 REQUIRED RESPONSE FORMAT for initial coordinate analysis:
