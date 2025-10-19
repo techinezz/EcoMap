@@ -106,7 +106,15 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-8 text-center -mt-16">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-8 text-center">
+        {/* Floating Badge */}
+        <div className="mb-8 inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-lg border border-[#25491B]/10">
+          <Zap className="text-[#25491B]" size={16} />
+          <span className="text-sm font-medium text-[#25491B]">
+            AI-Powered Sustainability Analysis
+          </span>
+        </div>
+
         {/* Main Heading */}
         <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-[#25491B] mb-6 max-w-4xl leading-tight">
           Transform Your City's
@@ -116,7 +124,7 @@ export default function LandingPage() {
         </h1>
 
         {/* Subheading */}
-        <p className="text-xl sm:text-2xl text-gray-700 mb-10 max-w-2xl leading-relaxed">
+        <p className="text-xl sm:text-2xl text-gray-700 mb-12 max-w-2xl leading-relaxed">
           Visualize, simulate, and analyze sustainability interventions with
           AI-powered insights for smarter urban planning.
         </p>
@@ -133,14 +141,6 @@ export default function LandingPage() {
             className="group-hover:translate-x-1 transition-transform"
           />
         </button>
-
-        {/* Floating Badge - moved below button */}
-        <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-lg border border-[#25491B]/10">
-          <Zap className="text-[#25491B]" size={16} />
-          <span className="text-sm font-medium text-[#25491B]">
-            AI-Powered Sustainability Analysis
-          </span>
-        </div>
       </main>
 
       {/* Decorative Elements */}

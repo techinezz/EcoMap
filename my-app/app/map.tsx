@@ -333,12 +333,10 @@ interface EcoMapProps {
   targetLocation: TargetLocation | null;
   onCoordinatesFinished?: (coordinates: any[]) => void;
   onSimulationDataChange?: (data: SimulationData) => void;
-  onChallengeStart?: (coordinates: any[]) => void;
-  isChallengeMode?: boolean;
 }
 
 
-const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onChallengeStart, isChallengeMode }) => {
+const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished }) => {
   const [drawMode, setDrawMode] = useState<string | null>(null);
   const featureGroupRef = useRef<L.FeatureGroup | null>(null);
   const [isOverlayMenuOpen, setIsOverlayMenuOpen] = useState(false);
@@ -535,20 +533,12 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onChal
     [treeClusters.length, solarClusters.length, placedPavementPoints.length, placedParks.length, triggerMaxClusterAlert]
   );
 
-  // Generate 4 random coordinates for challenge mode
-  const generateRandomCoordinates = (): LatLngTuple[] => {
-    // Get random location somewhere in the world (for demo, using SF area)
-    const baseLat = 37.8 + (Math.random() - 0.5) * 0.1;
-    const baseLng = -122.45 + (Math.random() - 0.5) * 0.1;
-    const size = 0.005; // Small area for challenge
-
-    return [
-      [baseLat, baseLng],
-      [baseLat, baseLng + size],
-      [baseLat - size, baseLng + size],
-      [baseLat - size, baseLng],
-    ];
-  };
+  const challengePolygonCoords: LatLngTuple[] = [
+    [37.8000, -122.4600],
+    [37.8000, -122.4550],
+    [37.7975, -122.4550],
+    [37.7975, -122.4600],
+  ];
 
   const handleStartChallenge = () => {
     handleClearLayers();
@@ -556,25 +546,19 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onChal
     if (featureGroupRef.current && mapRef.current) {
         const map = mapRef.current;
         const featureGroup = featureGroupRef.current;
-
-        // Generate random coordinates
-        const challengePolygonCoords = generateRandomCoordinates();
         const polygon = L.polygon(challengePolygonCoords, { color: '#488a36ff' });
-
+        
         featureGroup.addLayer(polygon);
-
+        
         const bounds = polygon.getBounds();
         setChallengeBounds(bounds);
         setIsChallengeActive(true);
-
+        
         map.flyToBounds(bounds, { padding: [50, 50] });
 
-        // Notify parent to open AI chat with these coordinates
-        if (onChallengeStart) {
-          onChallengeStart(challengePolygonCoords);
-        }
-
-        console.log("Challenge started with random coordinates:", challengePolygonCoords);
+        // ✅ REMOVED: No longer opens Gemini on challenge start
+        
+        console.log("Challenge started! Area: Presidio, San Francisco.");
     } else {
         console.error("Map or FeatureGroup ref not ready for challenge start.");
     }
