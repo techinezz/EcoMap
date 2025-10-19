@@ -65,6 +65,56 @@ export default function AIChat({
   const [ecoScoreData, setEcoScoreData] = useState<EcoScoreData | null>(null);
   const [isCalculatingScore, setIsCalculatingScore] = useState(false);
   const [internalChallengeMode, setInternalChallengeMode] = useState<ChallengeMode>('inactive');
+  const [voiceTranscript, setVoiceTranscript] = useState<Array<{role: 'user' | 'assistant', text: string}>>([]);
+
+  // State for location name
+  const [locationName, setLocationName] = useState<string>('');
+
+  // Reverse geocode to get location name with more specificity
+  const reverseGeocode = async (lat: number, lon: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        const address = data.address || {};
+
+        // Build a more specific location string prioritizing specific landmarks/buildings
+        const locationParts = [];
+
+        // Highest priority: specific landmarks, universities, buildings
+        if (address.university) locationParts.push(address.university);
+        if (address.school) locationParts.push(address.school);
+        if (address.building) locationParts.push(address.building);
+        if (address.amenity) locationParts.push(address.amenity);
+        if (address.leisure) locationParts.push(address.leisure);
+
+        // Medium priority: specific neighborhood/suburb
+        if (address.suburb) locationParts.push(address.suburb);
+        if (address.neighbourhood) locationParts.push(address.neighbourhood);
+
+        // Lower priority: general area info
+        if (address.city_district) locationParts.push(address.city_district);
+        if (address.city || address.town || address.village) {
+          locationParts.push(address.city || address.town || address.village);
+        }
+        if (address.county) locationParts.push(address.county);
+        if (address.state) locationParts.push(address.state);
+
+        // If we have specific parts, use them; otherwise fall back to full display_name
+        const locationName = locationParts.length > 0
+          ? locationParts.join(', ')
+          : data.display_name || '';
+
+        console.log('🗺️ Reverse geocode details:', { address, locationParts, final: locationName });
+        return locationName;
+      }
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+    }
+    return '';
+  };
 
   // Prepare coordinate context whenever coordinates change
   const getCoordinateContext = () => {
@@ -96,11 +146,13 @@ export default function AIChat({
 
 LOCATION DETAILS:
 - Center Point: Longitude ${centerLon}, Latitude ${centerLat}
-- This location is approximately at coordinates ${centerLat}°N, ${Math.abs(parseFloat(centerLon))}°W
+- This location is approximately at coordinates ${centerLat}°N, ${Math.abs(parseFloat(centerLon))}°W${locationName ? `\n- Place: ${locationName}` : ''}
 
 SELECTED AREA BOUNDARY:
 The user drew a polygon with the following corner points:
 ${polygonPoints}
+
+IMPORTANT: Use the exact place name "${locationName}" when referring to this location. Do not assume or guess a different neighborhood or area name.
 
 Please provide a detailed environmental and sustainability analysis for this specific geographic location. Include information about:
 - Environmental challenges in this area
@@ -226,6 +278,12 @@ Please provide a detailed environmental and sustainability analysis for this spe
     },
     onMessage: (message) => {
       console.log('Message:', message);
+      // Add message to transcript
+      if (message.source === 'user' && message.message) {
+        setVoiceTranscript(prev => [...prev, { role: 'user', text: message.message }]);
+      } else if (message.source === 'ai' && message.message) {
+        setVoiceTranscript(prev => [...prev, { role: 'assistant', text: message.message }]);
+      }
     },
     onModeChange: (mode) => {
       console.log('Mode changed:', mode);
@@ -359,6 +417,8 @@ Please provide a detailed environmental and sustainability analysis for this spe
       conversation.endSession();
     }
     setIsVoiceAgentOpen(false);
+    // Clear transcript when closing voice agent
+    setVoiceTranscript([]);
   };
 
   const scrollToBottom = () => {
@@ -447,6 +507,14 @@ Please provide a detailed environmental and sustainability analysis for this spe
     setIsLoading(true);
 
     try {
+      // Get full context including simulation data
+      const context = getCoordinateContext();
+
+      // Build the full prompt with context
+      const fullPrompt = context
+        ? `${context}\n\nUser Question: ${userMessage.content}`
+        : userMessage.content;
+
       // Call your Gemini API route
       const response = await fetch('/api/gemini', {
         method: 'POST',
@@ -454,7 +522,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: userMessage.content,
+          prompt: fullPrompt,
           coordinates: selectedCoordinates,
         }),
       });
@@ -569,6 +637,31 @@ Please provide a detailed environmental and sustainability analysis for this spe
     }
   }, [challengeMode]);
 
+  // Reverse geocode when coordinates change
+  useEffect(() => {
+    if (selectedCoordinates && selectedCoordinates.length > 0) {
+      const coords = selectedCoordinates[0];
+      if (Array.isArray(coords) && Array.isArray(coords[0])) {
+        // Calculate center point
+        let sumLat = 0, sumLon = 0, count = 0;
+        coords[0].forEach((point: number[]) => {
+          sumLon += point[0];
+          sumLat += point[1];
+          count++;
+        });
+        const centerLat = sumLat / count;
+        const centerLon = sumLon / count;
+
+        // Perform reverse geocoding
+        reverseGeocode(centerLat, centerLon).then((name) => {
+          console.log('📍 Reverse geocoded location:', name);
+          setLocationName(name);
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCoordinates]);
+
   // When coordinates are received, automatically send them to AI
   const prevCoordinatesRef = useRef<any[]>([]);
 
@@ -587,7 +680,10 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
       console.log('🔍 Challenge mode check:', { challengeMode, internalChallengeMode, autoMessage });
 
-      handleAutoAnalysis(autoMessage);
+      // Wait a bit for reverse geocoding to complete before analyzing
+      setTimeout(() => {
+        handleAutoAnalysis(autoMessage);
+      }, 500);
 
       // If voice agent is connected, send contextual update
       if (conversation.status === 'connected') {
@@ -617,6 +713,92 @@ Please provide a detailed environmental and sustainability analysis for this spe
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run on mount/unmount
+
+  // Listen for simulation completion and auto-analyze
+  useEffect(() => {
+    const handleSimulationComplete = async (event: any) => {
+      const simData = event.detail?.simulationData;
+      console.log('🎯 AIChat received simulation complete event:', simData);
+
+      if (!simData) return;
+
+      // Check if there are any simulations
+      const hasSimulations =
+        simData.totalTreesPlaced > 0 ||
+        simData.totalSolarPlaced > 0 ||
+        simData.placedPavementPoints.length > 0 ||
+        simData.placedParks.length > 0;
+
+      if (!hasSimulations) {
+        console.log('⚠️ No simulations to analyze');
+        return;
+      }
+
+      // Create auto-analysis message
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: 'Analyze my simulation',
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        // Get full context including simulation data
+        const context = getCoordinateContext();
+
+        // Build analysis prompt
+        const analysisPrompt = `${context}\n\nUser Request: Please analyze my sustainability simulation and provide:\n1. Environmental impact assessment of these interventions\n2. How these placements could improve air quality, reduce temperature, and manage stormwater\n3. Specific suggestions for optimizing placement or adding additional interventions\n4. Estimated costs and implementation timeline for these changes\n5. Any potential issues or conflicts with the current placement`;
+
+        const response = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: analysisPrompt,
+            coordinates: selectedCoordinates,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to get AI response');
+        }
+
+        const data = await response.json();
+
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.text,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, aiMessage]);
+      } catch (error) {
+        console.error('Error analyzing simulation:', error);
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Sorry, I encountered an error analyzing your simulation. Please try again.',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    window.addEventListener('simulationComplete', handleSimulationComplete);
+    console.log('✅ AIChat listening for simulation completion events');
+
+    return () => {
+      window.removeEventListener('simulationComplete', handleSimulationComplete);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCoordinates, simulationData]);
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -656,28 +838,33 @@ Please provide a detailed environmental and sustainability analysis for this spe
             </span>
           </div>
 
-          {/* Audio Visualizers - Centered and Larger */}
-          <div className="flex-1 flex items-center justify-center">
-            <div className="flex gap-12">
-              <div className="text-center">
-                <CircularAudioVisualizer
-                  audioData={inputAudioData}
-                  size={180}
-                  barCount={64}
-                  barColor="#ABD2A9"
-                />
-                <p className="text-sm text-gray-600 mt-4 font-medium">Your Voice</p>
+          {/* Transcript Display */}
+          <div className="flex-1 overflow-y-auto mb-4 space-y-3 p-4 bg-gray-50 rounded-lg">
+            {voiceTranscript.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                Start speaking to see the conversation transcript...
               </div>
-              <div className="text-center">
-                <CircularAudioVisualizer
-                  audioData={outputAudioData}
-                  size={180}
-                  barCount={64}
-                  barColor="#9BC299"
-                />
-                <p className="text-sm text-gray-600 mt-4 font-medium">AI Voice</p>
-              </div>
-            </div>
+            ) : (
+              voiceTranscript.map((entry, index) => (
+                <div
+                  key={index}
+                  className={`flex ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                      entry.role === 'user'
+                        ? 'bg-[#ABD2A9] text-gray-900'
+                        : 'bg-white text-gray-900 border border-gray-200'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold mb-1 opacity-70">
+                      {entry.role === 'user' ? 'You' : 'AI Assistant'}
+                    </div>
+                    <p className="text-sm">{entry.text}</p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Controls */}

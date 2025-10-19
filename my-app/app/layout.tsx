@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "EcoMap",
   description: "",
+  icons: {
+    icon: '/logo.svg',
+  },
 };
 
 export default function RootLayout({

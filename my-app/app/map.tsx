@@ -529,6 +529,12 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
     }));
     console.log('✅ Simulation data sent via window event');
 
+    // Method 3: Trigger auto-analysis in AIChat
+    window.dispatchEvent(new CustomEvent('simulationComplete', {
+      detail: { simulationData }
+    }));
+    console.log('✅ Triggered auto-analysis event');
+
     setSimulationMode(null);
   };
 
@@ -586,9 +592,6 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
   };
 
   const handleStartChallenge = async () => {
-    console.log('🔴🔴🔴 START CHALLENGE BUTTON CLICKED! 🔴🔴🔴');
-    alert('Start Challenge button was clicked!');
-
     setIsGeneratingChallenge(true);
 
     try {
