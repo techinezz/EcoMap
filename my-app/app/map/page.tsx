@@ -56,6 +56,10 @@ export default function MapPage() {
 
   const handleSimulationDataChange = (data: SimulationData) => {
     setSimulationData(data);
+    // Open chat when simulation is completed (only in normal mode)
+    if (challengeMode === 'inactive' && !isChatOpen) {
+      setIsChatOpen(true);
+    }
   };
 
   return (
