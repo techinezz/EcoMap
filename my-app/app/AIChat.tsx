@@ -229,12 +229,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
 
       // Wait a moment for the connection to stabilize, then send context
       setTimeout(() => {
-        console.log('⏰ setTimeout executing');
-        console.log('contextSentRef.current:', contextSentRef.current);
-        console.log('conversation.status:', conversation.status);
-
         if (!contextSentRef.current && conversation.status === 'connected') {
-          console.log('✅ Conditions met - proceeding to send context');
           // Use Gemini analysis if available, otherwise use basic coordinates
           let contextToSend = '';
 
@@ -269,11 +264,6 @@ Please provide a detailed environmental and sustainability analysis for this spe
           } catch (error) {
             console.error('Error sending context:', error);
           }
-        } else {
-          console.log('❌ Context NOT sent because:');
-          console.log('  - contextSentRef.current:', contextSentRef.current);
-          console.log('  - conversation.status:', conversation.status);
-          console.log('  - Expected status: "connected"');
         }
       }, 1000);
     },
