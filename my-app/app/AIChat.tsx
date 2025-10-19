@@ -106,39 +106,25 @@ export default function AIChat({
 
     if (selectedCoordinates && selectedCoordinates.length > 0) {
       // Calculate approximate center of the selected area
-      // Handle both formats: [[lat,lng], ...] for challenge mode and [[[lat,lng], ...]] for normal mode
-      let pointsArray: number[][];
+      const coords = selectedCoordinates[0]; // First polygon
+      if (Array.isArray(coords) && Array.isArray(coords[0])) {
+        let sumLat = 0, sumLon = 0, count = 0;
 
-      if (isChallengeMode) {
-        // Challenge mode: coordinates are [[lat, lng], [lat, lng], ...]
-        pointsArray = selectedCoordinates as number[][];
-      } else {
-        // Normal mode: coordinates are [[[lat, lng], [lat, lng], ...]]
-        const coords = selectedCoordinates[0];
-        if (Array.isArray(coords) && Array.isArray(coords[0])) {
-          pointsArray = coords[0];
-        } else {
-          return 'No area has been selected on the map yet.';
-        }
-      }
+        coords[0].forEach((point: number[]) => {
+          sumLon += point[0];
+          sumLat += point[1];
+          count++;
+        });
 
-      let sumLat = 0, sumLon = 0, count = 0;
+        const centerLon = (sumLon / count).toFixed(6);
+        const centerLat = (sumLat / count).toFixed(6);
 
-      pointsArray.forEach((point: number[]) => {
-        sumLat += point[0];  // Challenge mode: [lat, lng]
-        sumLon += point[1];
-        count++;
-      });
+        // Format the polygon points clearly
+        const polygonPoints = coords[0].map((point: number[]) =>
+          `(Longitude: ${point[0].toFixed(6)}, Latitude: ${point[1].toFixed(6)})`
+        ).join(', ');
 
-      const centerLon = (sumLon / count).toFixed(6);
-      const centerLat = (sumLat / count).toFixed(6);
-
-      // Format the polygon points clearly
-      const polygonPoints = pointsArray.map((point: number[]) =>
-        `(Latitude: ${point[0].toFixed(6)}, Longitude: ${point[1].toFixed(6)})`
-      ).join(', ');
-
-      contextString += `The user has selected a specific area on the map for environmental analysis.
+        contextString = `The user has selected a specific area on the map for environmental analysis.
 
 LOCATION DETAILS:
 - Center Point: Longitude ${centerLon}, Latitude ${centerLat}
@@ -155,6 +141,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
 - Green space availability
 - Climate risks
 - Sustainability recommendations`;
+      }
     } else {
       contextString = 'No area has been selected on the map yet. The user needs to draw an area on the map before you can provide location-specific analysis.';
     }
@@ -238,12 +225,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
             console.log('Sending Gemini analysis as context');
           } else {
             contextToSend = getCoordinateContext();
-            console.log('=== SENDING CONTEXT TO VOICE AGENT ===');
-            console.log('Is Challenge Mode:', isChallengeMode);
-            console.log('Selected Coordinates:', selectedCoordinates);
-            console.log('Full Context:');
-            console.log(contextToSend);
-            console.log('=== END CONTEXT ===');
+            console.log('Sending coordinate context via text:', contextToSend.substring(0, 100) + '...');
           }
 
           try {
@@ -255,7 +237,6 @@ Please provide a detailed environmental and sustainability analysis for this spe
             if ('sendUserMessage' in conversation && typeof conversation.sendUserMessage === 'function') {
               conversation.sendUserMessage(contextToSend);
               console.log('✅ Context message sent via sendUserMessage');
-              console.log('Context length:', contextToSend.length, 'characters');
             } else {
               console.error('❌ sendUserMessage not available on conversation object');
               console.log('Available methods:', Object.keys(conversation));
