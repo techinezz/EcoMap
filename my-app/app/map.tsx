@@ -633,32 +633,11 @@ const EcoMap: FC<EcoMapProps> = ({ targetLocation, onCoordinatesFinished, onSimu
 
         console.log("🚀 Challenge started! Area:", data.location);
 
-        // IMPORTANT: Notify parent that challenge has started FIRST
-        // Use MULTIPLE methods to ensure it works
-        console.log("🔍 Checking onChallengeStart callback:", typeof onChallengeStart);
-
-        // Method 1: Try the callback if it exists
-        if (onChallengeStart) {
-          console.log("📢 Calling onChallengeStart callback!");
-          onChallengeStart();
-          console.log("✅ onChallengeStart callback called");
-        } else {
-          console.error("❌ onChallengeStart callback is undefined!");
-        }
-
-        // Method 2: Call global window function directly (MOST RELIABLE)
-        console.log("📢 Calling window.pageChallengeStart()");
+        // Notify parent that challenge has started
+        // Call global window function directly
         if (typeof window !== 'undefined' && (window as any).pageChallengeStart) {
           (window as any).pageChallengeStart();
-          console.log("✅ window.pageChallengeStart() called successfully");
-        } else {
-          console.error("❌ window.pageChallengeStart is undefined!");
         }
-
-        // Method 3: Emit window event as final backup
-        console.log("📢 Emitting window event: challengeStart");
-        window.dispatchEvent(new CustomEvent('challengeStart'));
-        console.log("✅ Window event emitted");
 
         // Wait a tiny bit for state to propagate
         setTimeout(() => {

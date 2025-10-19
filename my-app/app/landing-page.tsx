@@ -15,7 +15,7 @@ export default function LandingPage() {
   return (
     <div className="relative min-h-screen overflow-hidden flex flex-col">
       {/* Globe Background */}
-      <div className="absolute inset-0 flex items-center justify-center z-0 -mt-10">
+      <div className="absolute inset-0 flex items-center justify-center z-0 mt-20">
         <Globe
           className="opacity-60"
           config={{
@@ -86,8 +86,8 @@ export default function LandingPage() {
               { location: [-25.2637, -57.5759] as [number, number], size: 0.05 }, // Asunción, Paraguay
             ],
             onRender: () => {},
-            width: 800,
-            height: 800,
+            width: 1500,
+            height: 1500,
           }}
         />
       </div>

@@ -63,7 +63,28 @@ export default function ChallengeChat() {
         setSelectedCoordinates(coords);
 
         // Auto-analyze with challenge-specific prompt
-        const autoMessage = 'Analyze the area I just selected on the map. Focus ONLY on environmental issues that can be addressed with trees, solar panels, permeable pavements, and parks. Do NOT provide solutions - just describe the key issues.';
+        const autoMessage = `Analyze the area I just selected on the map. Identify 3-4 specific environmental challenges that could be addressed with trees, solar panels, permeable pavements, and parks.
+
+IMPORTANT GUIDELINES:
+- Be creative and diverse - avoid always mentioning the same issues (urban heat island, runoff, air quality)
+- Consider niche, location-specific environmental problems such as:
+  * Biodiversity loss (habitat fragmentation, pollinator decline, urban wildlife corridors)
+  * Noise pollution (traffic noise, lack of sound barriers, acoustic comfort)
+  * Light pollution (excessive nighttime lighting, skyglow, disruption to circadian rhythms)
+  * Soil degradation (compaction, erosion, loss of organic matter, contamination)
+  * Microclimate issues (wind tunnels, cold pockets, lack of shade diversity)
+  * Social equity (unequal green space access, environmental justice, heat vulnerability in disadvantaged areas)
+  * Carbon sequestration gaps (missed opportunities for urban carbon storage)
+  * Groundwater recharge limitations (impervious surfaces preventing aquifer replenishment)
+  * Thermal comfort disparities (lack of cooling infrastructure in vulnerable neighborhoods)
+  * Ecological connectivity (missing green corridors, isolated habitat patches)
+  * Aesthetic degradation (visual blight, lack of natural beauty, community wellbeing)
+  * Mental health impacts (nature deficit, lack of restorative spaces)
+
+The issues don't need to be perfectly aligned with the interventions, but should be plausibly improvable through strategic placement of trees, solar panels, permeable pavement, or parks.
+
+Do NOT provide solutions - only describe the key environmental challenges.`;
+
 
         try {
           const response = await fetch('/api/gemini', {

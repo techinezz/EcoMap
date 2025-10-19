@@ -86,9 +86,11 @@ export default function AIChat({
         const centerLat = (sumLat / count).toFixed(6);
 
         // Format the polygon points clearly
-        const polygonPoints = coords[0].map((point: number[]) =>
-          `(Longitude: ${point[0].toFixed(6)}, Latitude: ${point[1].toFixed(6)})`
-        ).join(', ');
+        const polygonPoints = coords[0]
+          .filter((point: number[]) => Array.isArray(point) && point.length >= 2 && typeof point[0] === 'number' && typeof point[1] === 'number')
+          .map((point: number[]) =>
+            `(Longitude: ${point[0].toFixed(6)}, Latitude: ${point[1].toFixed(6)})`
+          ).join(', ');
 
         contextString = `The user has selected a specific area on the map for environmental analysis.
 
@@ -604,6 +606,17 @@ Please provide a detailed environmental and sustainability analysis for this spe
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCoordinates, challengeMode]);
+
+  // Cleanup: Disconnect voice session when component unmounts
+  useEffect(() => {
+    return () => {
+      // End voice session if connected when chat closes
+      if (conversation.status === 'connected') {
+        conversation.endSession();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run on mount/unmount
 
   return (
     <div className="flex flex-col h-full bg-white">
