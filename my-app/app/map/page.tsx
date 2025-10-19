@@ -101,7 +101,7 @@ export default function MapPage() {
         </div>
       )}
 
-      <div className="absolute top-4 left-4 z-99999">
+      <div className="absolute top-4 left-4 z-99888">
         <EcoMapOverlayComponent onLocationSelect={setTargetLocation} />
       </div>
     </div>
