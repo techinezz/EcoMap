@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { prompt, coordinates } = await request.json();
+    const { prompt, coordinates, locationName } = await request.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    console.log('📍 Gemini API received location name:', locationName);
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
@@ -38,7 +40,40 @@ export async function POST(request: NextRequest) {
 
       if (isInitialAnalysis && isChallengeMode) {
         // Challenge mode: Issues only, no solutions
-        coordinateContext = `\n\nIMPORTANT: The user has selected the following area(s) on the map:\n${JSON.stringify(coordinates, null, 2)}\n\nThese coordinates are in [longitude, latitude] format.
+        if (locationName) {
+          coordinateContext = `\n\nCRITICAL OVERRIDE INSTRUCTION - READ THIS FIRST:
+The user has drawn an area on the map. Through geocoding, we have determined the location is: "${locationName}"
+
+YOU MUST USE THIS EXACT LOCATION NAME. This is NOT a suggestion.
+- DO NOT analyze the coordinates to determine the location
+- DO NOT say "Jackson Heights" or any other neighborhood
+- DO NOT add street boundaries or detailed descriptions
+- The ONLY acceptable location reference is: "${locationName}"
+
+REQUIRED RESPONSE FORMAT for CHALLENGE MODE:
+You MUST structure your response exactly as follows:
+
+1. **Location Identification** 📍:
+   - Start with EXACTLY: "You selected an area around ${locationName}."
+   - Do not add any additional location details, street names, or boundaries
+   - Move immediately to the next section
+
+2. **Key Issues**
+   - List EXACTLY 2-4 primary sustainability challenges that ${locationName} faces
+   - ONLY focus on issues that can be addressed with: trees 🌳, solar panels ☀️, permeable pavements 🛣️, and parks 🏞️
+   - Examples: urban heat islands, flooding, stormwater runoff, air quality, lack of green space, high energy consumption
+   - For EACH issue, explain:
+     * What the problem is
+     * Why it's a concern in this specific area
+     * Which interventions (trees/solar/pavement/parks) would be most relevant
+   - Keep each issue to 2-3 sentences
+
+CRITICAL: Do NOT provide solutions or recommendations. Only describe the issues. The user will create their own solutions.
+
+Use clear formatting with headers, bullet points, and emojis.`;
+        } else {
+          // Only include coordinates if we don't have a location name
+          coordinateContext = `\n\nIMPORTANT: The user has selected the following area(s) on the map:\n${JSON.stringify(coordinates, null, 2)}\n\nThese coordinates are in [longitude, latitude] format.
 
 REQUIRED RESPONSE FORMAT for CHALLENGE MODE coordinate analysis:
 You MUST structure your response exactly as follows:
@@ -46,7 +81,6 @@ You MUST structure your response exactly as follows:
 1. **Location Identification** 📍:
    - Start with "You selected [specific area description]."
    - Be VERY specific: Include neighborhood names, street boundaries if possible, notable landmarks, and exact borough/district
-   - Example: "You selected an area in Chelsea and Greenwich Village, bounded approximately by West 34th Street to the north, West 14th Street to the south, 8th Avenue to the east, and the Hudson River to the west in Manhattan, New York City, New York, USA."
 
 2. **Key Issues**
    - List EXACTLY 2-4 primary sustainability challenges this specific area faces
@@ -61,8 +95,41 @@ You MUST structure your response exactly as follows:
 CRITICAL: Do NOT provide solutions or recommendations. Only describe the issues. The user will create their own solutions.
 
 Use clear formatting with headers, bullet points, and emojis.`;
+        }
       } else if (isInitialAnalysis) {
-        coordinateContext = `\n\nIMPORTANT: The user has selected the following area(s) on the map:\n${JSON.stringify(coordinates, null, 2)}\n\nThese coordinates are in [longitude, latitude] format.
+        if (locationName) {
+          // When we have a location name, completely override the format
+          coordinateContext = `\n\nCRITICAL OVERRIDE INSTRUCTION - READ THIS FIRST:
+The user has drawn an area on the map. Through geocoding, we have determined the location is: "${locationName}"
+
+YOU MUST USE THIS EXACT LOCATION NAME. This is NOT a suggestion.
+- DO NOT analyze the coordinates to determine the location
+- DO NOT say "Jackson Heights" or any other neighborhood
+- DO NOT add street boundaries or detailed descriptions
+- The ONLY acceptable location reference is: "${locationName}"
+
+REQUIRED RESPONSE FORMAT:
+You MUST structure your response exactly as follows:
+
+1. **Location Identification** 📍:
+   - Start with EXACTLY: "You selected an area around ${locationName}."
+   - Do not add any additional location details, street names, or boundaries
+   - Move immediately to the next section
+
+2. **Key Issues**
+   - List EXACTLY 2 primary sustainability challenges that ${locationName} faces
+   - Focus on: climate change impacts (flooding 💧, heat 🌡️, storms 🌪️), infrastructure problems, environmental quality (air quality 💨, water 💧), waste management ♻️, energy ⚡, transportation 🚗, biodiversity 🌳
+   - Keep each issue BRIEF: 1-2 sentences ONLY. Don't go into deep detail - just state the issue clearly and concisely
+
+3. **Possible Solutions**
+   - Provide EXACTLY 2 concrete, actionable solutions
+   - Include: infrastructure improvements, green infrastructure, policy changes, community initiatives, technological solutions
+   - Make solutions specific to the identified issues
+
+Use clear formatting with headers, bullet points, and emojis.`;
+        } else {
+          // Only include coordinates if we don't have a location name
+          coordinateContext = `\n\nIMPORTANT: The user has selected the following area(s) on the map:\n${JSON.stringify(coordinates, null, 2)}\n\nThese coordinates are in [longitude, latitude] format.
 
 REQUIRED RESPONSE FORMAT for initial coordinate analysis:
 You MUST structure your response exactly as follows:
@@ -70,7 +137,6 @@ You MUST structure your response exactly as follows:
 1. **Location Identification** 📍:
    - Start with "You selected [specific area description]."
    - Be VERY specific: Include neighborhood names, street boundaries if possible, notable landmarks, and exact borough/district
-   - Example: "You selected an area in Chelsea and Greenwich Village, bounded approximately by West 34th Street to the north, West 14th Street to the south, 8th Avenue to the east, and the Hudson River to the west in Manhattan, New York City, New York, USA."
    - If multiple areas, describe each one separately
 
 2. **Key Issues**
@@ -84,6 +150,7 @@ You MUST structure your response exactly as follows:
    - Make solutions specific to the identified issues
 
 Use clear formatting with headers, bullet points, and emojis.`;
+        }
       } else {
         // For follow-up questions, just provide the coordinates as context
         coordinateContext = `\n\nContext: The user previously selected area(s) with these coordinates:\n${JSON.stringify(coordinates, null, 2)}\n\nIMPORTANT: Answer their question in a SHORT, CONCISE format:

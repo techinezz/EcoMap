@@ -70,46 +70,174 @@ export default function AIChat({
   // State for location name
   const [locationName, setLocationName] = useState<string>('');
 
-  // Reverse geocode to get location name with more specificity
-  const reverseGeocode = async (lat: number, lon: number) => {
+  // Search for POIs within the polygon using Overpass API
+  const searchPOIsInArea = async (coords: number[][]) => {
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`
-      );
+      // Calculate bounding box
+      let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+      coords.forEach(([lon, lat]) => {
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+        minLon = Math.min(minLon, lon);
+        maxLon = Math.max(maxLon, lon);
+      });
+
+      // Overpass query to find universities, schools, parks, and other landmarks
+      const overpassQuery = `
+        [out:json][timeout:25];
+        (
+          node["amenity"="university"](${minLat},${minLon},${maxLat},${maxLon});
+          way["amenity"="university"](${minLat},${minLon},${maxLat},${maxLon});
+          relation["amenity"="university"](${minLat},${minLon},${maxLat},${maxLon});
+          node["amenity"="college"](${minLat},${minLon},${maxLat},${maxLon});
+          way["amenity"="college"](${minLat},${minLon},${maxLat},${maxLon});
+          node["amenity"="school"](${minLat},${minLon},${maxLat},${maxLon});
+          way["amenity"="school"](${minLat},${minLon},${maxLat},${maxLon});
+          node["leisure"="park"](${minLat},${minLon},${maxLat},${maxLon});
+          way["leisure"="park"](${minLat},${minLon},${maxLat},${maxLon});
+          node["leisure"="stadium"](${minLat},${minLon},${maxLat},${maxLon});
+          way["leisure"="stadium"](${minLat},${minLon},${maxLat},${maxLon});
+          node["building"="university"](${minLat},${minLon},${maxLat},${maxLon});
+          way["building"="university"](${minLat},${minLon},${maxLat},${maxLon});
+        );
+        out center tags;
+      `;
+
+      const response = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: overpassQuery,
+      });
+
       if (response.ok) {
         const data = await response.json();
-        const address = data.address || {};
+        console.log('🏫 Overpass POI results:', data.elements);
 
-        // Build a more specific location string prioritizing specific landmarks/buildings
-        const locationParts = [];
+        if (data.elements && data.elements.length > 0) {
+          // Find the most relevant POI (prioritize universities, then colleges, then schools)
+          const sortedPOIs = data.elements.sort((a: any, b: any) => {
+            const scoreA = a.tags.amenity === 'university' ? 3 : a.tags.amenity === 'college' ? 2 : 1;
+            const scoreB = b.tags.amenity === 'university' ? 3 : b.tags.amenity === 'college' ? 2 : 1;
+            return scoreB - scoreA;
+          });
 
-        // Highest priority: specific landmarks, universities, buildings
-        if (address.university) locationParts.push(address.university);
-        if (address.school) locationParts.push(address.school);
-        if (address.building) locationParts.push(address.building);
-        if (address.amenity) locationParts.push(address.amenity);
-        if (address.leisure) locationParts.push(address.leisure);
-
-        // Medium priority: specific neighborhood/suburb
-        if (address.suburb) locationParts.push(address.suburb);
-        if (address.neighbourhood) locationParts.push(address.neighbourhood);
-
-        // Lower priority: general area info
-        if (address.city_district) locationParts.push(address.city_district);
-        if (address.city || address.town || address.village) {
-          locationParts.push(address.city || address.town || address.village);
+          const topPOI = sortedPOIs[0];
+          if (topPOI.tags && topPOI.tags.name) {
+            return topPOI.tags.name;
+          }
         }
-        if (address.county) locationParts.push(address.county);
-        if (address.state) locationParts.push(address.state);
-
-        // If we have specific parts, use them; otherwise fall back to full display_name
-        const locationName = locationParts.length > 0
-          ? locationParts.join(', ')
-          : data.display_name || '';
-
-        console.log('🗺️ Reverse geocode details:', { address, locationParts, final: locationName });
-        return locationName;
       }
+    } catch (error) {
+      console.error('Overpass API error:', error);
+    }
+    return null;
+  };
+
+  // Reverse geocode multiple points to get the most accurate location
+  const reverseGeocodeMultiPoint = async (coords: number[][]) => {
+    try {
+      // First, try to find specific POIs (universities, parks, etc.) in the area
+      const poiName = await searchPOIsInArea(coords);
+
+      // Get center point for regular reverse geocoding
+      let sumLat = 0, sumLon = 0, count = 0;
+      coords.forEach((point: number[]) => {
+        sumLon += point[0];
+        sumLat += point[1];
+        count++;
+      });
+      const centerLat = sumLat / count;
+      const centerLon = sumLon / count;
+
+      // Also get a few corner points for better coverage
+      const pointsToCheck = [
+        [centerLat, centerLon], // Center
+        [coords[0][1], coords[0][0]], // First corner
+      ];
+
+      // Add middle points if polygon is large enough
+      if (coords.length > 2) {
+        const midIdx = Math.floor(coords.length / 2);
+        pointsToCheck.push([coords[midIdx][1], coords[midIdx][0]]);
+      }
+
+      // Query all points
+      const results = await Promise.all(
+        pointsToCheck.map(async ([lat, lon]) => {
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`
+            );
+            if (response.ok) {
+              return await response.json();
+            }
+          } catch (error) {
+            console.error('Reverse geocoding error for point:', lat, lon, error);
+          }
+          return null;
+        })
+      );
+
+      // Filter out nulls and analyze all results
+      const validResults = results.filter(r => r !== null);
+      console.log('🗺️ All reverse geocode results:', validResults);
+
+      // Find the most specific result (one with most detailed address fields)
+      let bestResult = validResults[0];
+      let maxSpecificity = 0;
+
+      validResults.forEach(result => {
+        const address = result?.address || {};
+        let specificity = 0;
+
+        // Count how specific this result is
+        if (address.university) specificity += 10;
+        if (address.college) specificity += 10;
+        if (address.school) specificity += 9;
+        if (address.building) specificity += 8;
+        if (address.amenity) specificity += 7;
+        if (address.leisure) specificity += 7;
+        if (address.park) specificity += 7;
+        if (address.neighbourhood) specificity += 6;
+        if (address.suburb) specificity += 5;
+        if (address.hamlet) specificity += 5;
+        if (address.road) specificity += 4;
+        if (address.city_district) specificity += 3;
+
+        if (specificity > maxSpecificity) {
+          maxSpecificity = specificity;
+          bestResult = result;
+        }
+      });
+
+      const address = bestResult?.address || {};
+
+      // Simple approach: just use borough/neighborhood and city
+      let locationName = '';
+
+      // Priority 1: Suburb/Neighborhood (e.g., "Flushing", "Brooklyn Heights")
+      if (address.suburb) {
+        locationName = address.suburb;
+      } else if (address.neighbourhood) {
+        locationName = address.neighbourhood;
+      } else if (address.city_district) {
+        locationName = address.city_district;
+      } else if (address.quarter) {
+        locationName = address.quarter;
+      }
+
+      // Add borough/county if available (e.g., "Queens", "Brooklyn")
+      if (address.county && address.county !== locationName) {
+        locationName = locationName ? `${locationName}, ${address.county}` : address.county;
+      }
+
+      // Fallback to city if nothing else
+      if (!locationName && (address.city || address.town)) {
+        locationName = address.city || address.town;
+      }
+
+      console.log('🗺️ Best result address:', address);
+      console.log('🗺️ Final location:', locationName);
+      return locationName;
     } catch (error) {
       console.error('Reverse geocoding error:', error);
     }
@@ -142,19 +270,23 @@ export default function AIChat({
             `(Longitude: ${point[0].toFixed(6)}, Latitude: ${point[1].toFixed(6)})`
           ).join(', ');
 
-        contextString = `The user has selected a specific area on the map for environmental analysis.
+        // Build context with strong location emphasis
+        let locationContext = '';
+        if (locationName) {
+          locationContext = `CRITICAL INSTRUCTION: The user has drawn an area around "${locationName}". You MUST refer to this location as "${locationName}" throughout your entire response. DO NOT use any other location name or neighborhood name. DO NOT say "Jackson Heights" or any other area - the correct location is "${locationName}".
 
-LOCATION DETAILS:
+CONFIRMED LOCATION: ${locationName}
+
+`;
+        }
+
+        contextString = `${locationContext}The user has selected a specific area on the map for environmental analysis.
+
+GEOGRAPHIC COORDINATES (for reference only - use the location name above, not these coordinates):
 - Center Point: Longitude ${centerLon}, Latitude ${centerLat}
-- This location is approximately at coordinates ${centerLat}°N, ${Math.abs(parseFloat(centerLon))}°W${locationName ? `\n- Place: ${locationName}` : ''}
+- Polygon boundary points: ${polygonPoints}
 
-SELECTED AREA BOUNDARY:
-The user drew a polygon with the following corner points:
-${polygonPoints}
-
-IMPORTANT: Use the exact place name "${locationName}" when referring to this location. Do not assume or guess a different neighborhood or area name.
-
-Please provide a detailed environmental and sustainability analysis for this specific geographic location. Include information about:
+Please provide a detailed environmental and sustainability analysis for ${locationName || 'this specific geographic location'}. Include information about:
 - Environmental challenges in this area
 - Air quality concerns
 - Water quality issues
@@ -449,6 +581,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
         body: JSON.stringify({
           prompt: message,
           coordinates: selectedCoordinates,
+          locationName: locationName,
         }),
       });
 
@@ -524,6 +657,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
         body: JSON.stringify({
           prompt: fullPrompt,
           coordinates: selectedCoordinates,
+          locationName: locationName,
         }),
       });
 
@@ -616,6 +750,9 @@ Please provide a detailed environmental and sustainability analysis for this spe
     setMessages((prev) => [...prev, feedbackMessage]);
   };
 
+  // Track previous coordinates to detect changes
+  const prevCoordinatesRef = useRef<any[]>([]);
+
   // Sync challenge mode
   useEffect(() => {
     console.log('🎮 Challenge mode prop changed:', challengeMode, '(internal:', internalChallengeMode, ')');
@@ -637,71 +774,51 @@ Please provide a detailed environmental and sustainability analysis for this spe
     }
   }, [challengeMode]);
 
-  // Reverse geocode when coordinates change
+  // Reverse geocode when coordinates change and trigger analysis after
   useEffect(() => {
     if (selectedCoordinates && selectedCoordinates.length > 0) {
       const coords = selectedCoordinates[0];
       if (Array.isArray(coords) && Array.isArray(coords[0])) {
-        // Calculate center point
-        let sumLat = 0, sumLon = 0, count = 0;
-        coords[0].forEach((point: number[]) => {
-          sumLon += point[0];
-          sumLat += point[1];
-          count++;
-        });
-        const centerLat = sumLat / count;
-        const centerLon = sumLon / count;
+        // Check if coordinates actually changed
+        if (JSON.stringify(selectedCoordinates) !== JSON.stringify(prevCoordinatesRef.current)) {
+          prevCoordinatesRef.current = selectedCoordinates;
 
-        // Perform reverse geocoding
-        reverseGeocode(centerLat, centerLon).then((name) => {
-          console.log('📍 Reverse geocoded location:', name);
-          setLocationName(name);
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCoordinates]);
+          // Perform multi-point reverse geocoding for better accuracy
+          reverseGeocodeMultiPoint(coords[0]).then((name) => {
+            console.log('📍 Reverse geocoded location:', name);
+            setLocationName(name);
 
-  // When coordinates are received, automatically send them to AI
-  const prevCoordinatesRef = useRef<any[]>([]);
+            // Now that we have the location, trigger auto-analysis
+            const autoMessage = (challengeMode === 'simulating' || internalChallengeMode === 'simulating')
+              ? 'Analyze the area I just selected on the map. Focus ONLY on environmental issues that can be addressed with trees, solar panels, permeable pavements, and parks. Do NOT provide solutions - just describe the key issues.'
+              : 'Analyze the area I just selected on the map.';
 
-  useEffect(() => {
-    // Only trigger if coordinates actually changed (not empty and different from previous)
-    if (selectedCoordinates &&
-        selectedCoordinates.length > 0 &&
-        JSON.stringify(selectedCoordinates) !== JSON.stringify(prevCoordinatesRef.current)) {
+            console.log('🔍 Challenge mode check:', { challengeMode, internalChallengeMode, autoMessage });
+            console.log('🔍 Using location name:', name);
 
-      prevCoordinatesRef.current = selectedCoordinates;
+            // Trigger analysis after location is determined
+            handleAutoAnalysis(autoMessage);
 
-      // In challenge mode, use special prompt (check BOTH challengeMode prop and internal state)
-      const autoMessage = (challengeMode === 'simulating' || internalChallengeMode === 'simulating')
-        ? 'Analyze the area I just selected on the map. Focus ONLY on environmental issues that can be addressed with trees, solar panels, permeable pavements, and parks. Do NOT provide solutions - just describe the key issues.'
-        : 'Analyze the area I just selected on the map.';
-
-      console.log('🔍 Challenge mode check:', { challengeMode, internalChallengeMode, autoMessage });
-
-      // Wait a bit for reverse geocoding to complete before analyzing
-      setTimeout(() => {
-        handleAutoAnalysis(autoMessage);
-      }, 500);
-
-      // If voice agent is connected, send contextual update
-      if (conversation.status === 'connected') {
-        const coordinateContext = getCoordinateContext();
-        try {
-          // Check if the method exists before calling
-          if ('setCustomLlmExtraBody' in conversation && typeof (conversation as any).setCustomLlmExtraBody === 'function') {
-            (conversation as any).setCustomLlmExtraBody({
-              context: coordinateContext,
-            });
-          }
-        } catch (error) {
-          console.error('Error updating context:', error);
+            // If voice agent is connected, send contextual update
+            if (conversation.status === 'connected') {
+              const coordinateContext = getCoordinateContext();
+              try {
+                if ('setCustomLlmExtraBody' in conversation && typeof (conversation as any).setCustomLlmExtraBody === 'function') {
+                  (conversation as any).setCustomLlmExtraBody({
+                    context: coordinateContext,
+                  });
+                }
+              } catch (error) {
+                console.error('Error updating context:', error);
+              }
+            }
+          });
         }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCoordinates, challengeMode]);
+
 
   // Cleanup: Disconnect voice session when component unmounts
   useEffect(() => {
@@ -760,6 +877,7 @@ Please provide a detailed environmental and sustainability analysis for this spe
           body: JSON.stringify({
             prompt: analysisPrompt,
             coordinates: selectedCoordinates,
+            locationName: locationName,
           }),
         });
 
