@@ -15,7 +15,7 @@ export default function LandingPage() {
   return (
     <div className="relative min-h-screen overflow-hidden flex flex-col">
       {/* Globe Background */}
-      <div className="absolute inset-0 flex items-center justify-center z-0 mt-20">
+      <div className="absolute inset-0 flex items-center justify-center z-0 mt-[-30px]">
         <Globe
           className="opacity-60"
           config={{
